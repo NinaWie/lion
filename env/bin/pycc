@@ -1,0 +1,3 @@
+#!/Users/ninawiedemann/Desktop/thesis/multi-path-routing.nosync/env/bin/python3
+from numba.pycc import main
+main()
