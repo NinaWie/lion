@@ -77,7 +77,8 @@ def edge_costs(
 
 @jit(nopython=True)
 def sp_dag(
-    stack, pos2node, shifts, angles_all, dists, preds, instance, edge_cost
+    stack, pos2node, shifts, angles_all, dists, preds, instance, edge_cost,
+    shift_costs
 ):
     """
     Angle-weighted dynamic program for Directed Acyclic Graphs (O(n))
@@ -102,6 +103,7 @@ def sp_dag(
     for i in range(len(dists)):
         v_x = stack[i, 0]
         v_y = stack[i, 1]
+        vertex_costs = instance[v_x, v_y]
         for s in range(len(shifts)):
             neigh_x = int(v_x + shifts[s][0])
             neigh_y = int(v_y + shifts[s][1])
@@ -111,10 +113,15 @@ def sp_dag(
             ):
                 neigh_stack_ind = pos2node[neigh_x, neigh_y]
                 # add up pylon cost + angle cost + edge cost
-                cost_per_angle = dists[i] + angles_all[s] + instance[
-                    neigh_x, neigh_y] + edge_cost[neigh_stack_ind, s]
+                cost_per_angle = dists[i] + angles_all[s]
+                # distance times pylon average plus edge costs
+                edge_itself = shift_costs[s] * (
+                    0.5 * (vertex_costs + instance[neigh_x, neigh_y]) +
+                    edge_cost[neigh_stack_ind, s]
+                )
                 # update distances and predecessors
-                dists[neigh_stack_ind, s] = np.min(cost_per_angle)
+                dists[neigh_stack_ind,
+                      s] = np.min(cost_per_angle) + edge_itself
                 preds[neigh_stack_ind, s] = np.argmin(cost_per_angle)
     return dists, preds
 
@@ -155,22 +162,19 @@ def average_lcp(stack, shifts, angles_all, dists, preds, instance, edge_cost):
 @jit(nopython=True)
 def sp_dag_reversed(
     stack, pos2node, shifts, angles_all, dists, instance, edge_cost,
-    shift_lines, edge_weight
+    shift_lines, edge_weight, shift_costs
 ):
     """
     Compute cumulative distances from TARGET vertex
     """
     inst_len_x, inst_len_y = instance.shape
     preds = np.zeros(dists.shape) - 1
-    # initialize: outgoing edges of dest ind
-    dest_x = stack[-1, 0]
-    dest_y = stack[-1, 1]
-    for s in range(len(shifts)):
-        dists[-1, s] = instance[dest_x, dest_y] + edge_cost[-1, s]
+
     # update OUTGOING edge distances
-    for i in range(1, len(stack)):
+    for i in range(len(stack)):
         v_x = stack[-i - 1, 0]
         v_y = stack[-i - 1, 1]
+        vertex_costs = instance[v_x, v_y]
         for s in range(len(shifts)):
             neigh_x = v_x + shifts[s][0]
             neigh_y = v_y + shifts[s][1]
@@ -178,9 +182,21 @@ def sp_dag_reversed(
             if (0 <= neigh_x <
                 inst_len_x) and (0 <= neigh_y < inst_len_y
                                  ) and (pos2node[neigh_x, neigh_y] >= 0):
-                edge_cost_this = edge_cost[-i - 1, s]
-                # iterate over incoming edges for angle
-                cost_per_angle = np.zeros(len(shifts))
+
+                # compute the general edge cost (without angle and dist)
+                edge_itself = shift_costs[s] * (
+                    0.5 * (vertex_costs + instance[neigh_x, neigh_y]) +
+                    edge_cost[-i - 1, s]
+                )
+
+                # beginning: only update out edges of destination
+                if i == 0:
+                    dists[-1, s] = edge_itself
+                    continue
+
+                # iterate over incoming edges to find minimum
+                min_angle_cost = np.inf
+                min_angle_index = 0
                 for s2 in range(len(shifts)):
                     in_neigh_x = v_x - shifts[s2][0]
                     in_neigh_y = v_y - shifts[s2][1]
@@ -190,13 +206,13 @@ def sp_dag_reversed(
                         and pos2node[in_neigh_x, in_neigh_y] >= 0
                     ):
                         in_neigh_ind = pos2node[in_neigh_x, in_neigh_y]
-                        cost_per_angle[s2] = dists[
-                            in_neigh_ind, s2] + angles_all[s, s2] + instance[
-                                v_x, v_y] + edge_cost_this
-                    else:
-                        cost_per_angle[s2] = np.inf
-                dists[-i - 1, s] = np.min(cost_per_angle)
-                preds[-i - 1, s] = np.argmin(cost_per_angle)
+                        curr_angle_cost = dists[in_neigh_ind,
+                                                s2] + angles_all[s, s2]
+                    if curr_angle_cost < min_angle_cost:
+                        min_angle_cost = curr_angle_cost
+                        min_angle_index = s2
+                dists[-i - 1, s] = min_angle_cost + edge_itself
+                preds[-i - 1, s] = min_angle_index
     return dists, preds
 
 

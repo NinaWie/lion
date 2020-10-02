@@ -99,6 +99,9 @@ class AngleGraph():
             shift_lines.append(np.array(line[1:-1]))
         self.shift_lines = shift_lines
 
+        # construct shift values for diagonals
+        self.shift_costs = np.array([np.linalg.norm(s) for s in self.shifts])
+
     def add_nodes(self):
         tic = time.time()
         # SORT --> Make stack
@@ -119,7 +122,7 @@ class AngleGraph():
             (len(self.stack_array), len(self.shifts))
         ) + np.inf
         # self.dists = np.concatenate((self.stack_array, amend), axis=1)
-        self.dists[0, :] = self.instance[tuple(self.start_inds)]
+        self.dists[0, :] = 0
         self.pos2node = (np.zeros(self.instance.shape) -
                          1).astype(int)  # -1 for the unfilled ones
         # make mapping to position
@@ -270,7 +273,7 @@ class AngleGraph():
             self.dists, self.preds = sp_dag(
                 self.stack_array, self.pos2node, np.array(self.shifts),
                 self.angle_cost_array, self.dists, self.preds, self.instance,
-                self.edge_cost
+                self.edge_cost, self.shift_costs
             )
         else:
             raise ValueError("wrong mode input: " + mode)
@@ -300,7 +303,8 @@ class AngleGraph():
         self.dists_ba, self.preds_ba = sp_dag_reversed(
             self.stack_array, self.pos2node,
             np.array(self.shifts) * (-1), self.angle_cost_array, self.dists_ba,
-            self.instance, self.edge_cost, self.shift_lines, self.edge_weight
+            self.instance, self.edge_cost, self.shift_lines, self.edge_weight,
+            self.shift_costs
         )
         self.time_logs["shortest_path_tree"] = round(time.time() - tic, 3)
         if self.verbose:

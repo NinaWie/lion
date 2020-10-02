@@ -1,8 +1,11 @@
 .vscode
-lenv
+env
 .DS_Store
 
 __pycache__/
+
+# jupyter
+*ipynb
 
 # Distribution / packaging
 .Python
