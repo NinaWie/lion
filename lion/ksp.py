@@ -1,6 +1,6 @@
 import numpy as np
 import time
-from lion.utils.utils_ksp import KspUtils
+import lion.utils.utils_ksp as ut_ksp
 from lion.utils.utils import get_distance_surface
 
 
@@ -9,8 +9,8 @@ class KSP:
     def __init__(self, graph):
         self.graph = graph
         try:
-            print(self.graph.dists_ba.shape)
-            print(self.graph.preds_ba.shape)
+            test = self.graph.dists_ba.shape
+            test = self.graph.preds_ba.shape
         except AttributeError:
             raise RuntimeError(
                 "Cannot initialize KSP object with a graph without"
@@ -81,10 +81,10 @@ class KSP:
         tic = time.time()
         best_paths = [self.graph.best_path]
         (min_node_dists, _, min_shift_dists) = self.compute_min_node_dists()
-        # print(min_node_dists)
+
         _, _, best_cost = self.graph.transform_path(self.graph.best_path)
         factor = best_cost * cost_add
-        # print(factor)
+
         _, arr_len = min_node_dists.shape
         for _ in range(k - 1):
             # set the already used vertices to inf
@@ -169,7 +169,7 @@ class KSP:
             )
             collected_path.append(vertices_path)
 
-        dists = KspUtils.pairwise_dists(collected_path, mode=metric)
+        dists = ut_ksp.pairwise_dists(collected_path, mode=metric)
 
         # find the two which are most diverse (following 2-approx)
         max_dist_pair = np.argmax(dists)
@@ -255,7 +255,7 @@ class KSP:
                     self.graph.start_inds, self.graph.dest_inds, x1, [x2, x3]
                 )
                 eucl_dist = [
-                    KspUtils.path_distance(
+                    ut_ksp.path_distance(
                         prev_path, vertices_path, mode=metric
                     ) for prev_path in best_paths
                 ]
@@ -265,7 +265,6 @@ class KSP:
                 best_paths.append(vertices_path)
 
                 if len(best_paths) >= k:
-                    print(j, "expanded", expanded)
                     break
         self.graph.time_logs["ksp"] = round(time.time() - tic, 3)
         if self.graph.verbose:
@@ -326,7 +325,6 @@ class KSP:
                 # print("found new path with cost", cost)
                 # print("sorted dist:", sorted_dists[j])
             if len(best_paths) >= k:
-                print(j)
                 break
         self.graph.time_logs["ksp"] = round(time.time() - tic, 3)
         if self.graph.verbose:
@@ -350,5 +348,5 @@ class KSP:
 #         continue
 #     e = e_shortest[j]
 #     # compute start and self.graph.dest_inds v
-#     x1, x2, x3 = KspUtils._flat_ind_to_inds(e, summed_dists.shape)
+#     x1, x2, x3 = ut_ksp._flat_ind_to_inds(e, summed_dists.shape)
 # if self.graph.dists_ba[x1, x2, x3] != 0: ... insert the rest

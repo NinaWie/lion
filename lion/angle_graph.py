@@ -1,8 +1,10 @@
-from lion.utils.utils import (
-    get_half_donut, angle, discrete_angle_costs, bresenham_line, angle_360
-)
-from lion.utils.utils_costs import CostUtils
-from lion.utils.utils_ksp import KspUtils
+# from lion.utils.utils import (
+#     get_half_donut, angle, discrete_angle_costs, bresenham_line, angle_360
+# )
+import lion.utils.utils as ut
+import lion.utils.utils_costs as ut_cost
+import lion.utils.utils_ksp as ut_ksp
+
 from lion.fast_shortest_path import (
     sp_dag,
     sp_dag_reversed,
@@ -53,11 +55,11 @@ class AngleGraph():
         angles_all += np.inf
         for i in range(len(self.shifts)):
             for j, s in enumerate(self.shifts):
-                ang = angle(s, self.shifts[i])
+                ang = ut.angle(s, self.shifts[i])
                 if ang <= self.angle_norm_factor:
-                    angles_all[
-                        i,
-                        j] = discrete_angle_costs(ang, self.angle_norm_factor)
+                    angles_all[i, j] = ut.discrete_angle_costs(
+                        ang, self.angle_norm_factor
+                    )
         self.time_logs["compute_angles"] = round(time.time() - tic, 3)
         # multiply with angle weights, need to prevent that not inf * 0
         angles_all[angles_all < np.inf
@@ -84,10 +86,10 @@ class AngleGraph():
         self.dest_inds = np.asarray(dest)
         self.angle_norm_factor = max_angle_lg
         vec = self.dest_inds - self.start_inds
-        shifts = get_half_donut(
+        shifts = ut.get_half_donut(
             pylon_dist_min, pylon_dist_max, vec, angle_max=max_angle
         )
-        shift_angles = [angle_360(s, vec) for s in shifts]
+        shift_angles = [ut.angle_360(s, vec) for s in shifts]
         # sort the shifts
         self.shifts = np.asarray(shifts)[np.argsort(shift_angles)]
         self.shift_tuples = self.shifts
@@ -95,7 +97,7 @@ class AngleGraph():
         # construct bresenham lines
         shift_lines = List()
         for shift in self.shifts:
-            line = bresenham_line(0, 0, shift[0], shift[1])
+            line = ut.bresenham_line(0, 0, shift[0], shift[1])
             shift_lines.append(np.array(line[1:-1]))
         self.shift_lines = shift_lines
 
@@ -157,7 +159,7 @@ class AngleGraph():
         # downsample
         tic = time.time()
         if self.factor > 1:
-            self.cost_rest = CostUtils.inf_downsample(
+            self.cost_rest = ut_cost.inf_downsample(
                 self.cost_rest, self.factor
             )
 
@@ -181,7 +183,7 @@ class AngleGraph():
         self,
         layer_classes=["resistance"],
         class_weights=[1],
-        angle_weight=0.1,
+        angle_weight=0,
         **kwargs
     ):
         """
@@ -244,7 +246,7 @@ class AngleGraph():
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
         if np.any(shift_norms == 1):
-            warnings.warn("Raster approach, EDGE WEIGHT IS SET TO ZERO")
+            # warnings.warn("Raster approach, EDGE WEIGHT IS SET TO ZERO")
             self.edge_weight = 0
 
         shift_norms = [np.linalg.norm(s) for s in self.shifts]
@@ -277,7 +279,7 @@ class AngleGraph():
             )
         else:
             raise ValueError("wrong mode input: " + mode)
-        # print(np.min(self.dists[:, self.dest_inds[0], self.dest_inds[1]]))
+            
         self.time_logs["shortest_path"] = round(time.time() - tic, 3)
         if self.verbose:
             print("time edges:", round(time.time() - tic, 3))
@@ -331,7 +333,7 @@ class AngleGraph():
         ), "start to dest != dest to start " + str(d_ab) + " " + str(d_ba)
         # compute best path
         self.best_path = np.array(
-            KspUtils.get_sp_dest_shift(
+            ut_ksp.get_sp_dest_shift(
                 self.dists_ba,
                 self.preds_ba,
                 self.pos2node,
@@ -356,12 +358,12 @@ class AngleGraph():
         """
         # compute path from start to middle point - incoming edge
         best_edge = np.array(best_edge)
-        path_ac = KspUtils.get_sp_start_shift(
+        path_ac = ut_ksp.get_sp_start_shift(
             self.dists, self.preds, self.pos2node, start, best_edge,
             np.array(self.shifts), best_shift
         )
         # compute path from middle point to dest - outgoing edge
-        path_cb = KspUtils.get_sp_dest_shift(
+        path_cb = ut_ksp.get_sp_dest_shift(
             self.dists_ba, self.preds_ba, self.pos2node, dest, best_edge,
             np.array(self.shifts) * (-1), best_shift
         )
@@ -380,11 +382,11 @@ class AngleGraph():
             [self.cost_instance[:, p[0], p[1]] for p in path]
         )
         # include angle costs
-        ang_costs = CostUtils.compute_angle_costs(path, self.angle_norm_factor)
+        ang_costs = ut_cost.compute_angle_costs(path, self.angle_norm_factor)
         # prevent that inf * 0 if zero edge weight
         edge_costs = 0
         if self.edge_weight != 0:
-            edge_costs = CostUtils.compute_edge_costs(path, self.edge_inst)
+            edge_costs = ut_cost.compute_edge_costs(path, self.edge_inst)
         # print("unweighted edge costs", np.sum(edge_costs))
         path_costs = np.concatenate(
             (np.swapaxes(np.array([ang_costs]), 1, 0), path_costs), axis=1
@@ -455,18 +457,22 @@ class AngleGraph():
         # here simply return the indices for start and destination
         return source, dest
 
-    def sum_costs(self):
-        pass
-
-    def remove_vertices(self, dist_surface, delete_padding=0):
-        pass
-
     # -----------------------------------------------------------------------
     # INTERFACE
 
     def single_sp(self, power=1, **kwargs):
         """
-        Function for full processing until shortest path
+        Function for full processing to yield shortest path
+        Necessary parameters:
+            start_inds: list of two cell coordinates 
+            dest_inds: list of two cell coordinates 
+        Optional parameters:
+            pylon_dist_min: minimum cell distance of neighboring pylons (default 3)
+            pylon_dist_max: minimum cell distance of neighboring pylons (default 5)
+            angle_weight: how important is the angle (default 0)
+            edge_weight: how important are the cable costs compared to pylons (default 0)
+            max_angle: maximum deviation in angle from the straight connection from start to end (default: pi/2)
+            max_angle_lg: maximum angle at a pylon (default: pi/2)
         """
         self.start_inds = kwargs["start_inds"]
         self.dest_inds = kwargs["dest_inds"]
@@ -522,8 +528,8 @@ class AngleGraph():
         # iterate over combinations
         for a_w in angle_weights:
             for e_w in edge_weights:
-                kwargs["ANGLE_WEIGHT"] = a_w
-                kwargs["EDGE_WEIGHT"] = e_w
+                kwargs["angle_weight"] = a_w
+                kwargs["edge_weight"] = e_w
                 path, _, _ = self.single_sp(**kwargs)
 
                 # get path costs

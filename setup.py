@@ -20,7 +20,7 @@ setup(
     author_email=('wnina@ethz.ch'),
     url='https://gitlab.ethz.ch/wnina/lion',
     license='MIT',
-    install_requires=['numpy', 'numba', 'matplotlib'],
+    install_requires=['numpy', 'numba', 'matplotlib', 'scipy'],
     classifiers=[
         'Intended Audience :: Developers',
         'Intended Audience :: Science/Research',

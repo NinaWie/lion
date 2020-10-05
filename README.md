@@ -27,6 +27,7 @@ Given resistance costs for a raster of geo locations, the goal is to compute the
 The library itself has few major dependencies (see [setup.py](setup.py)). 
 * `numba`for fast algorithms
 * `numpy`
+* `scipy`
 
 If wanted, create a virtual environment and activate it:
 

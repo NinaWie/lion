@@ -1,3 +1,21 @@
+"""
+Methods to compute the shortest path or multiple shortest paths
+given an instance and a configuration file
+
+Instance: 2D array with resistance values (infinities or NaNs for forbidden)
+
+Configuration: Dictionary with the following neceassay and optional parameters
+    + start_inds: list of two cell coordinates 
+    + dest_inds: list of two cell coordinates
+
+    - pylon_dist_min: minimum cell distance of neighboring pylons (default 3)
+    - pylon_dist_max: minimum cell distance of neighboring pylons (default 5)
+    - angle_weight: how important is the angle (default 0)
+    - edge_weight: how important are the cable costs compared to pylons (default 0)
+    - max_angle: maximum deviation in angle from the straight connection from start to end (default: pi/2)
+    - max_angle_lg: maximum angle at a pylon (default: pi/2)
+"""
+
 import numpy as np
 from lion.angle_graph import AngleGraph
 from lion.ksp import KSP
@@ -49,7 +67,7 @@ def optimal_route(instance, cfg):
     tic_raster = time.time()
     path, _, _ = graph.single_sp(**cfg)
     toc_raster = time.time() - tic_raster
-    print("DONE, processing time:", toc_raster)
+    # print("DONE, processing time:", toc_raster)
     return path
 
 
@@ -80,7 +98,6 @@ def optimal_pylon_spotting(instance, cfg, corridor=None):
         # second option: corridor is given --> intersection of corr and forb
         else:
             project_region = corridor * project_region
-    print("in spotting method", cfg)
     # Pylon spotting
     graph = AngleGraph(instance, project_region, verbose=VERBOSE)
     path, _, _ = graph.single_sp(**cfg)

@@ -1,82 +1,12 @@
 import numpy as np
-from csv import writer
-from types import SimpleNamespace
-import json
 
-try:
-    from scipy.ndimage.morphology import binary_dilation
-    from scipy.spatial.distance import cdist
-except ImportError:
-    print("WARNING: scipy couldnot be loaded")
-# from numba import jit, njit
+from scipy.ndimage.morphology import binary_dilation
+from scipy.spatial.distance import cdist
 
-
-def append_to_csv(file_name, list_of_elem):
-    """
-    Append a row to a csv file
-    :param file_name: filename to open csv file
-    :param list_of_elem: list corresponding to new row
-    """
-    # Open file in append mode
-    with open(file_name, 'a+', newline='') as write_obj:
-        # Create a writer object from csv module
-        csv_writer = writer(write_obj)
-        # Add contents of list as last row in the csv file
-        csv_writer.writerow(list_of_elem)
-
-
-def time_test_csv(
-    ID, CSV_TIMES, SCALE_PARAM, GTNX, GRAPH_TYPE, graph, path_costs, cost_sum,
-    dist, time_pipeline, notes
-):
-    """
-    Prepare current data for time logs csv file
-    :param CSV_TIMES: output file
-    :params: all parameters to save in the csv
-    """
-    # get scale factor and number of nonzero pixels:
-    try:
-        factor = graph.factor
-    except AttributeError:
-        factor = 1
-    n_pixels = np.sum(np.mean(graph.cost_rest, axis=0) > 0)
-    # --> csv columns:
-    # scale,graphtool,graphtype,n_nodes,n_edges,add_nodes_time,add_edge_time,
-    # shortest_path_time, notes
-    param_list = [
-        ID, SCALE_PARAM, GTNX, GRAPH_TYPE, factor, dist, n_pixels,
-        graph.n_nodes, graph.n_edges, graph.time_logs["add_nodes"],
-        graph.time_logs["add_all_edges"], graph.time_logs["shortest_path"],
-        path_costs, cost_sum, time_pipeline, notes
-    ]
-    append_to_csv(CSV_TIMES, param_list)
-
-
-def compute_pylon_dists(PYLON_DIST_MIN, PYLON_DIST_MAX, RASTER, SCALE_PARAM):
-    PYLON_DIST_MIN = PYLON_DIST_MIN / RASTER
-    PYLON_DIST_MAX = PYLON_DIST_MAX / RASTER
-    if SCALE_PARAM > 1:
-        PYLON_DIST_MIN /= SCALE_PARAM
-        PYLON_DIST_MAX /= SCALE_PARAM
-    print("defined pylon distances in raster:", PYLON_DIST_MIN, PYLON_DIST_MAX)
-    return PYLON_DIST_MIN, PYLON_DIST_MAX
-
-
-def load_config(config_filepath, scale_factor=1):
-    # load file
-    with open(config_filepath, "r") as infile:
-        cfg_dict = json.load(infile)
-        print(config_filepath)
-        print(cfg_dict)
-        cfg = SimpleNamespace()
-        cfg.data = SimpleNamespace(**cfg_dict["data"])
-        cfg.graph = SimpleNamespace(**cfg_dict["graph"])
-        (cfg.graph.pylon_dist_min,
-         cfg.graph.pylon_dist_max) = compute_pylon_dists(
-             cfg.data.pylon_dist_min, cfg.data.pylon_dist_max, cfg.data.raster,
-             scale_factor
-         )
-    return cfg
+__all__ = [
+    "get_half_donut", "angle", "discrete_angle_costs", "bresenham_line",
+    "angle_360"
+]
 
 
 def normalize(instance):
@@ -103,8 +33,8 @@ def rescale(img, scale_factor):
     new_img = np.zeros((x_len_new, y_len_new))
     for i in range(x_len_new):
         for j in range(y_len_new):
-            patch = img[i * scale_factor:(i + 1) * scale_factor, j *
-                        scale_factor:(j + 1) * scale_factor]
+            patch = img[i * scale_factor:(i + 1) * scale_factor,
+                        j * scale_factor:(j + 1) * scale_factor]
             new_img[i, j] = np.mean(patch)
     return new_img
 
@@ -152,7 +82,6 @@ def get_donut(radius_low, radius_high):
     return pos_x - img_size, pos_y - img_size
 
 
-#@njit
 def angle(vec1, vec2):
     """
     Compute angle between two vectors
@@ -176,7 +105,7 @@ def angle(vec1, vec2):
         angle = 2 * np.pi - angle
     # can still be nan if v1 or v2 is 0
     if np.isnan(angle):
-        print(vec1, vec2, v1, v2)
+        # print(vec1, vec2, v1, v2)
         return 0
         # raise ValueError("angle is nan, check whether vec1 or vec2 = 0")
     return angle
@@ -212,9 +141,12 @@ def get_half_donut(radius_low, radius_high, vec, angle_max=0.5 * np.pi):
     return new_tuples
 
 
-def discrete_angle_costs(ang, max_angle_lg, mode="norm"):
+def discrete_angle_costs(ang, max_angle_lg, mode="linear"):
     """
-    Define angle costs for each angle
+    Implementation of different angle cost functions:
+        linear: cost increases linearly with the angle
+        discrete: discrete cost classes, e.g. 0.3 for all small angles, then 1
+        quadratic could be another option, just definition of a function
     Arguments:
         ang: float between 0 and pi, angle between edges
         max_angle_lg: maximum angle cutoff
@@ -224,7 +156,7 @@ def discrete_angle_costs(ang, max_angle_lg, mode="norm"):
     3 times the cost, up to 90 5 times the cost --> norm: 1.5 / 5 = 0.3
     """
     # TODO: 3 times technical costs for example
-    if mode == "norm":
+    if mode == "linear":
         return ang / max_angle_lg
     elif mode == "discrete":
         if ang <= np.pi / 6:
@@ -256,7 +188,7 @@ def get_lg_donut(
     radius_low, radius_high, vec, max_angle, max_angle_lg=np.pi / 4
 ):
     """
-    Compute all possible combinations of edges in restricted angle
+    Compute all possible combinations (tuples) of edges in restricted angle
     :param radius_low: minimum radius
     :param radius_high: maximum radius
     :param vec: direction vector
@@ -340,10 +272,10 @@ def cdist_dist(path_dilation):
     # transform array to indices array as input to cdist
     xa = np.array([[i, j] for i in range(x_len) for j in range(y_len)])
     xb = np.swapaxes(np.vstack(np.where(path_dilation > 0)), 1, 0)
-    print(xa.shape, xb.shape)
+    # print(xa.shape, xb.shape)
     # main computation
     all_dists = cdist(xa, xb)
-    print(all_dists.shape)
+    # print(all_dists.shape)
     out = np.min(all_dists, axis=1)
     # re-transform indices to image
     k = 0
