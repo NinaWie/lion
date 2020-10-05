@@ -23,7 +23,7 @@ def plot_paths(instance, paths, buffer=0, out_path="test_path.png"):
 class TestAPI(unittest.TestCase):
 
     test_instance = np.random.rand(100, 100)
-    num_nans = 100
+    num_nans = 50
     forb_x = (np.random.rand(num_nans) * 100).astype(int)
     forb_y = (np.random.rand(num_nans) * 100).astype(int)
     test_instance[forb_x, forb_y] = np.nan

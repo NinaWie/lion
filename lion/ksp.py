@@ -1,7 +1,7 @@
 import numpy as np
 import time
-import lion.utils.utils_ksp as ut_ksp
-from lion.utils.utils import get_distance_surface
+import lion.utils.ksp as ut_ksp
+from lion.utils.general import get_distance_surface
 
 
 class KSP:
@@ -330,23 +330,3 @@ class KSP:
         if self.graph.verbose:
             print("FIND KSP time:", self.graph.time_logs["ksp"])
         return [self.graph.transform_path(path) for path in best_paths]
-
-
-# Iterate over edge costs!
-# FOR EDGES instead of vertices (replace from summed_dists onwards)
-# summed_dists = (self.graph.dists + self.graph.dists_ba - self.graph.instance)
-# # argsort
-# e_shortest = np.argsort(summed_dists.flatten())
-# # sorted dists:
-# sorted_dists = summed_dists.flatten()[e_shortest]
-# # iterate over edges from least to most costly
-# for j in range(len(e_shortest)):
-#     if sorted_dists[j] == sorted_dists[j - 1] or np.isnan(
-#         sorted_dists[j]
-#     ):
-#         # already checked
-#         continue
-#     e = e_shortest[j]
-#     # compute start and self.graph.dest_inds v
-#     x1, x2, x3 = ut_ksp._flat_ind_to_inds(e, summed_dists.shape)
-# if self.graph.dists_ba[x1, x2, x3] != 0: ... insert the rest

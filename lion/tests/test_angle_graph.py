@@ -2,7 +2,7 @@ import numpy as np
 import unittest
 from types import SimpleNamespace
 from lion.angle_graph import AngleGraph
-from lion.utils.utils import bresenham_line
+from lion.utils.general import bresenham_line
 
 
 class TestImplicitLG(unittest.TestCase):

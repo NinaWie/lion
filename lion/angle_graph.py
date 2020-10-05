@@ -1,9 +1,6 @@
-# from lion.utils.utils import (
-#     get_half_donut, angle, discrete_angle_costs, bresenham_line, angle_360
-# )
-import lion.utils.utils as ut
-import lion.utils.utils_costs as ut_cost
-import lion.utils.utils_ksp as ut_ksp
+import lion.utils.general as ut
+import lion.utils.costs as ut_cost
+import lion.utils.ksp as ut_ksp
 
 from lion.fast_shortest_path import (
     sp_dag,
@@ -279,7 +276,7 @@ class AngleGraph():
             )
         else:
             raise ValueError("wrong mode input: " + mode)
-            
+
         self.time_logs["shortest_path"] = round(time.time() - tic, 3)
         if self.verbose:
             print("time edges:", round(time.time() - tic, 3))

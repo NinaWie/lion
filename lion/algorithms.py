@@ -5,7 +5,7 @@ given an instance and a configuration file
 Instance: 2D array with resistance values (infinities or NaNs for forbidden)
 
 Configuration: Dictionary with the following neceassay and optional parameters
-    + start_inds: list of two cell coordinates 
+    + start_inds: list of two cell coordinates
     + dest_inds: list of two cell coordinates
 
     - pylon_dist_min: minimum cell distance of neighboring pylons (default 3)

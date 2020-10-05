@@ -1,5 +1,5 @@
 import numpy as np
-from lion.utils.utils import (bresenham_line, discrete_angle_costs, angle)
+from lion.utils.general import (bresenham_line, discrete_angle_costs, angle)
 try:
     # import only required for the watershed transform, so imported
     # only of available in order to reduce dependencies
