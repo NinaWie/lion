@@ -104,35 +104,43 @@ class AngleGraph():
     def add_nodes(self):
         tic = time.time()
         # SORT --> Make stack
-        tmp_list = self._helper_list()
         visit_points = (self.instance < np.inf).astype(int)
-        stack = topological_sort_jit(
+        initial_pos2node = np.zeros(visit_points.shape) - 1
+        # run topologial sort --> fill pos2node
+        initial_pos2node, _ = topological_sort_jit(
             self.dest_inds[0], self.dest_inds[1],
-            np.asarray(self.shifts) * (-1), visit_points, tmp_list
+            np.asarray(self.shifts) * (-1), visit_points, initial_pos2node, 0
         )
-        stack = del_after_dest(stack, self.start_inds[0], self.start_inds[1])
+        # build stack from pos2node (sort it)
+        self.stack_array = np.dstack(
+            np.unravel_index(
+                np.argsort(initial_pos2node.ravel()), visit_points.shape
+            )
+        )[0]
+        start_point = np.where(
+            np.all(self.stack_array == self.start_inds, axis=1)
+        )[0][0]
+        self.stack_array = (self.stack_array[start_point:]).astype(int)
         if self.verbose:
-            print("time topo sort:", round(time.time() - tic, 3))
-            print("stack length", len(stack))
-        tic = time.time()
+            print("time stack construction sort:", round(time.time() - tic, 3))
+            print(
+                "stack", len(self.stack_array), self.stack_array[0],
+                self.stack_array[-1]
+            )
 
-        self.stack_array = np.array(stack)
+        # build pos2node
+        self.pos2node = (
+            initial_pos2node - start_point +
+            len(initial_pos2node[initial_pos2node == -1])
+        ).astype(int)
+        self.pos2node[self.pos2node < 0] = -1
+
+        # initializes dists and predecessors
+        tic = time.time()
         self.dists = np.zeros(
             (len(self.stack_array), len(self.shifts))
         ) + np.inf
-        # self.dists = np.concatenate((self.stack_array, amend), axis=1)
         self.dists[0, :] = 0
-        self.pos2node = (np.zeros(self.instance.shape) -
-                         1).astype(int)  # -1 for the unfilled ones
-        # make mapping to position
-        for i in range(len(self.stack_array)):
-            (x, y) = tuple(self.stack_array[i])
-            self.pos2node[x, y] = i
-
-        # self.dists = np.zeros((len(self.shifts), self.x_len, self.y_len))
-        # self.dists += np.inf
-        # i, j = self.start_inds
-        # self.dists[:, i, j] = self.instance[i, j]
         self.preds = np.zeros(self.dists.shape) - 1
         self.time_logs["add_nodes"] = round(time.time() - tic, 3)
         self.n_pixels = self.x_len * self.y_len
@@ -321,13 +329,13 @@ class AngleGraph():
                 start_dests.append(np.inf)
         d_ba_arg = np.argmin(start_dests)
         (i, j) = self.shifts[d_ba_arg]
-        d_ba = self.dists_ba[self.pos2node[s0 + i, s1 + j],
-                             d_ba_arg] + self.instance[s0, s1]
+        d_ba = self.dists_ba[self.pos2node[s0 + i, s1 + j], d_ba_arg]
 
         d_ab = np.min(self.dists[self.pos2node[tuple(self.dest_inds)], :])
         assert np.isclose(
             d_ba, d_ab
         ), "start to dest != dest to start " + str(d_ab) + " " + str(d_ba)
+
         # compute best path
         self.best_path = np.array(
             ut_ksp.get_sp_dest_shift(
@@ -397,7 +405,7 @@ class AngleGraph():
         return np.asarray(path
                           ).tolist(), path_costs.tolist(), cost_sum.tolist()
 
-    def _display_dists(self, edge_array, func=np.min):
+    def _display_dists(self, edge_array, func=np.min, name="dists"):
         arr = np.zeros(self.pos2node.shape)
         for i in range(len(self.pos2node)):
             for j in range(len(self.pos2node[0])):
@@ -405,7 +413,8 @@ class AngleGraph():
                 if ind >= 0:
                     arr[i, j] = func(edge_array[ind, :])
         plt.imshow(arr)
-        plt.savefig("dists_ba_view.png")
+        plt.colorbar()
+        plt.savefig(name + ".png")
 
     def get_shortest_path(self, start_inds, dest_inds, ret_only_path=False):
         dest_ind_stack = self.pos2node[tuple(dest_inds)]
@@ -461,18 +470,31 @@ class AngleGraph():
         """
         Function for full processing to yield shortest path
         Necessary parameters:
-            start_inds: list of two cell coordinates 
-            dest_inds: list of two cell coordinates 
+            start_inds: list of two cell coordinates
+            dest_inds: list of two cell coordinates
         Optional parameters:
-            pylon_dist_min: minimum cell distance of neighboring pylons (default 3)
-            pylon_dist_max: minimum cell distance of neighboring pylons (default 5)
+            pylon_dist_min: min cell distance of neighboring pylons (default 3)
+            pylon_dist_max: min cell distance of neighboring pylons (default 5)
             angle_weight: how important is the angle (default 0)
-            edge_weight: how important are the cable costs compared to pylons (default 0)
-            max_angle: maximum deviation in angle from the straight connection from start to end (default: pi/2)
+            edge_weight: importance of cable costs vs pylon costs (default 0)
+            max_angle: maximum deviation in angle from the straight connection
+                       from start to end (default: pi/2)
             max_angle_lg: maximum angle at a pylon (default: pi/2)
         """
-        self.start_inds = kwargs["start_inds"]
-        self.dest_inds = kwargs["dest_inds"]
+        # assert that start and dest are provided and in project bounds
+        try:
+            self.start_inds = kwargs["start_inds"]
+            self.dest_inds = kwargs["dest_inds"]
+        except KeyError:
+            raise RuntimeError(
+                "Must specify start_inds and dest_inds in cfg dict!"
+            )
+        instance_shape = np.asarray(self.hard_constraints.shape)
+        assert np.all(np.asarray(self.start_inds) < instance_shape) and np.all(
+            np.asarray(self.dest_inds) < instance_shape
+        ), "start or dest not in project region!"
+
+        # initialize donut ring and edge costs
         self.set_shift(self.start_inds, self.dest_inds, **kwargs)
         if self.verbose:
             print("1) Initialize shifts and instance (corridor)")
@@ -482,6 +504,7 @@ class AngleGraph():
         self.add_nodes()
         if self.verbose:
             print("2) Initialize distances to inf and predecessors")
+        # MAIN ALGORITHM
         self.add_edges(**kwargs)
         if self.verbose:
             print("3) Compute source shortest path tree")
@@ -501,65 +524,3 @@ class AngleGraph():
         path, path_costs, cost_sum = self.single_sp(**kwargs)
         self.get_shortest_path_tree(start_inds, dest_inds)
         return path, path_costs, cost_sum
-
-    def pareto(self, save_img_path=None, **kwargs):
-        """
-        vary: dictionary of the form
-            "var_name":[1,2,3]
-            where var_name refers to the variable to change and the list
-            specificies the possible values
-        cost_names: The names of the classes to be compared
-        """
-        pareto, weight_list, cost_sum = [], [], []
-        compare_names = ["angle", "edge_costs", "resistance"]
-        angle_weights = [0.1, 0.3]  # , 0.6, 0.9]
-        edge_weights = [0.2, 0.5]  # , 0.8, 1.5, 2.0]
-        minimal_weights = np.array(
-            [np.min(angle_weights),
-             np.min(edge_weights)]
-        )
-        maximal_weights = np.array(
-            [np.max(angle_weights),
-             np.max(edge_weights)]
-        )
-        # iterate over combinations
-        for a_w in angle_weights:
-            for e_w in edge_weights:
-                kwargs["angle_weight"] = a_w
-                kwargs["edge_weight"] = e_w
-                path, _, _ = self.single_sp(**kwargs)
-
-                # get path costs
-                path_cost_raw, column_names = self.raw_path_costs(path)
-                path_cost_table = np.array(
-                    [
-                        path_cost_raw[:, column_names.index(comp_name)]
-                        for comp_name in compare_names
-                    ]
-                )
-                pareto.append(np.sum(path_cost_table, axis=1))
-                cost_sum.append(np.sum(path_cost_table))
-
-                # cumbersome transformation of weights
-                normed_weights = (np.array([a_w, e_w]) - minimal_weights
-                                  ) / (maximal_weights - minimal_weights)
-                weights = list(normed_weights)
-                weights.append(np.max([1.5 - np.sum(weights), 0]))
-                weights = weights / np.sum(weights)
-                weight_list.append(np.array(weights))
-        pareto = np.asarray(pareto)
-        weight_list = np.asarray(weight_list)
-
-        # save as pickle
-        with open(save_img_path + "_pareto_data.dat", "wb") as outfile:
-            pickle.dump(
-                (pareto, weight_list, compare_names, cost_sum), outfile
-            )
-
-        plot_pareto_scatter_3d(
-            pareto,
-            weight_list,
-            compare_names,
-            cost_sum=cost_sum,
-            out_path=save_img_path
-        )

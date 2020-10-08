@@ -66,7 +66,8 @@ def optimal_route(instance, cfg):
     # compute path
     tic_raster = time.time()
     path, _, _ = graph.single_sp(**cfg)
-    toc_raster = time.time() - tic_raster
+    if VERBOSE:
+        print("Overall timefor optimal route", time.time() - tic_raster)
     # print("DONE, processing time:", toc_raster)
     return path
 
@@ -105,17 +106,20 @@ def optimal_pylon_spotting(instance, cfg, corridor=None):
 
 
 # ----------------------------------- KSP  ---------------------------------
-def run_ksp(graph, cfg, k, thresh=10, algorithm=KSP.find_ksp):
+def run_ksp(graph, cfg, k, thresh=100, algorithm=KSP.laplace):
     """
     Build the shortest path trees and compute k diverse shortest paths
     """
     # construct sp trees
+    tic = time.time()
     _ = graph.sp_trees(**cfg)
     # compute k shortest paths
     ksp_processor = KSP(graph)
     ksp_out = algorithm(ksp_processor, k, thresh=thresh)
     # extract path itself
     ksp_paths = [k[0] for k in ksp_out]
+    if VERBOSE:
+        print("Overall timefor run ksp", time.time() - tic)
     return ksp_paths
 
 
