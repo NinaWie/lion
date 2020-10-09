@@ -320,16 +320,13 @@ class AngleGraph():
         # distance in ba: take IN edges to source, by computing in neighbors
         # take their first dim value (out edge to source) + source val
         (s0, s1) = self.start_inds
-        start_dests = []
-        for s, (i, j) in enumerate(self.shifts):
-            ind = self.pos2node[s0 + i, s1 + j]
-            if ind >= 0:
-                start_dests.append(self.dists_ba[ind, s])
-            else:
-                start_dests.append(np.inf)
+        neigh_inds = [self.pos2node[s0 + i, s1 + j] for (i, j) in self.shifts]
+        start_dests = [
+            self.dists_ba[neigh_inds[s], s] if neigh_inds[s] >= 0 else np.inf
+            for s, (i, j) in enumerate(self.shifts)
+        ]
         d_ba_arg = np.argmin(start_dests)
-        (i, j) = self.shifts[d_ba_arg]
-        d_ba = self.dists_ba[self.pos2node[s0 + i, s1 + j], d_ba_arg]
+        d_ba = np.min(start_dests)
 
         d_ab = np.min(self.dists[self.pos2node[tuple(self.dest_inds)], :])
         assert np.isclose(

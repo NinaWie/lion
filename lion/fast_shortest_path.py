@@ -205,9 +205,9 @@ def sp_dag_reversed(
                         in_neigh_ind = pos2node[in_neigh_x, in_neigh_y]
                         curr_angle_cost = dists[in_neigh_ind,
                                                 s2] + angles_all[s, s2]
-                    if curr_angle_cost < min_angle_cost:
-                        min_angle_cost = curr_angle_cost
-                        min_angle_index = s2
+                        if curr_angle_cost < min_angle_cost:
+                            min_angle_cost = curr_angle_cost
+                            min_angle_index = s2
                 dists[-i - 1, s] = min_angle_cost + edge_itself
                 preds[-i - 1, s] = min_angle_index
     return dists, preds
