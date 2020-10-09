@@ -12,7 +12,7 @@ scripts = []
 
 setup(
     name='lion',
-    version='0.0.1',
+    version='1.1.0',
     description='Linear infrastructure optimization networks',
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",

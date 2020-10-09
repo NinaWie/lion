@@ -1,11 +1,9 @@
 from numba import jit
-import time
 import numpy as np
-from numba.typed import List
 
 
 @jit(nopython=True)
-def topological_sort_jit(v_x, v_y, shifts, to_visit, stack):
+def topological_sort_jit(v_x, v_y, shifts, to_visit, stack, curr_ind):
     """
     Fast C++ (numba) recursive method for topological sorting
     Arguments:
@@ -28,19 +26,18 @@ def topological_sort_jit(v_x, v_y, shifts, to_visit, stack):
             neigh_x >= 0 and neigh_x < x_len and neigh_y >= 0
             and neigh_y < y_len and to_visit[neigh_x, neigh_y] == 1
         ):
-            topological_sort_jit(neigh_x, neigh_y, shifts, to_visit, stack)
+            _, curr_ind = topological_sort_jit(
+                neigh_x, neigh_y, shifts, to_visit, stack, curr_ind
+            )
     # Push current vertex to stack which stores result
-    l_tmp = List()
-    l_tmp.append(v_x)
-    l_tmp.append(v_y)
-    stack.append(l_tmp)
-    return stack
+    stack[v_x, v_y] = curr_ind
+    return stack, curr_ind + 1
 
 
 @jit(nopython=True)
 def del_after_dest(stack, d_x, d_y):
     for i in range(len(stack)):
-        if stack[i][0] == d_x and stack[i][1] == d_y:
+        if stack[i, 0] == d_x and stack[i, 1] == d_y:
             return stack[i:]
 
 
@@ -224,7 +221,7 @@ def sp_bf(
     Angle-weighted Bellman Ford algorithm (General graph)
     Implemented with numba for performance - O(lm) where l is the
     maximum length of the shortest path
-    
+
     Arguments:
         n_iters: Int - At most the number of vertices in the graph, if known
             then the maximum length of the shortest path
