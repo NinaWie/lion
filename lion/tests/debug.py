@@ -1,5 +1,6 @@
 import numpy as np
-
+import pickle
+from lion.utils import general
 from lion.algorithms import (
     optimal_pylon_spotting, optimal_route, ksp_pylons, ksp_routes
 )
@@ -21,33 +22,33 @@ def plot_paths(instance, paths, buffer=0, out_path="test_path.png"):
     plt.savefig(out_path, bbox_inches='tight')
 
 
-test_instance = np.random.rand(100, 100)
-num_nans = 100
-forb_x = (np.random.rand(num_nans) * 100).astype(int)
-forb_y = (np.random.rand(num_nans) * 100).astype(int)
-test_instance[forb_x, forb_y] = np.nan
+# GILYTICS Instance
+with open("data/rmap_ndarray_11.pickle", "rb") as infile:
+    test_instance = pickle.load(infile)
 
-# create configuration
-cfg = dict()
-cfg["start_inds"] = [6, 6]
-cfg["dest_inds"] = [94, 90]
-test_instance[tuple(cfg["start_inds"])] = 0
-test_instance[tuple(cfg["dest_inds"])] = 0
+sp = np.asarray([962, 122])
+ep = np.asarray([585, 2601])
+# downsample for fast testing
+factor = 1
+if factor > 1:
+    test_instance = general.rescale(test_instance, factor)
+    sp = (sp / factor).astype(int)
+    ep = (ep / factor).astype(int)
+cfg = {}
+cfg["start_inds"] = sp
+cfg["dest_inds"] = ep
+cfg["angle_weight"] = 0
+print(test_instance.shape, cfg)
 
-test_instance = np.load("debug.npy")
+# path = optimal_route(test_instance, cfg.copy())
+# paths = [path]
+paths = ksp_routes(test_instance, cfg.copy(), 5)
 
-cfg = {
-    'start_inds': [2, 2],
-    'dest_inds': [37, 98],
-    'angle_weight': 0,
-    'max_angle': 2.0707963267948966,
-    'pylon_dist_min': 0.9,
-    'pylon_dist_max': 1.5
-}
-
-path = optimal_route(
-    test_instance,
-    cfg.copy(),
-)
-print(path)
-plot_paths(test_instance, [path], out_path="test.png")
+# plotting
+print(len(paths))
+plot_instance = test_instance.copy().astype(float)
+plot_instance[plot_instance == 28000] = np.inf
+plotmin = np.min(plot_instance[plot_instance < np.inf])
+plotmax = np.max(plot_instance[plot_instance < np.inf])
+plot_instance = (plot_instance - plotmin) / (plotmax - plotmin)
+plot_paths(plot_instance, paths, out_path="test.png")

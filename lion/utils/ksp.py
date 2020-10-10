@@ -21,6 +21,35 @@ def compute_eucl(path1, path2, mode="mean"):
         return np.max(min_dists_out)
 
 
+@jit(nopython=True)
+def fast_dilation(path_points, arr_shape, iters=50):
+    arr = np.zeros(arr_shape)
+    for i in range(len(path_points)):
+        arr[path_points[i][0], path_points[i][1]] = 1
+
+    start_x, end_x = (np.min(path_points[:, 0]), np.max(path_points[:, 0]))
+    start_y, end_y = (np.min(path_points[:, 1]), np.max(path_points[:, 1]))
+    # todo: must be in array bounds
+    for i in range(iters):
+        arr_prev = arr.copy()
+        for x in range(start_x - 1, end_x + 2):
+            for y in range(start_y - 1, end_y + 2):
+                if arr_prev[x, y] > 0 or arr_prev[x - 1, y] > 0 or arr_prev[
+                    x + 1,
+                    y] > 0 or arr_prev[x, y - 1] > 0 or arr_prev[x, y + 1] > 0:
+                    arr[x, y] += 1
+        if start_x > 1:
+            start_x -= 1
+        if end_x < arr_shape[0] - 3:
+            end_x += 1
+        if start_y > 1:
+            start_y -= 1
+        if end_y < arr_shape[1] - 3:
+            end_y += 1
+
+    return arr
+
+
 def get_sp_from_preds(pred_map, curr_vertex, start_vertex):
     """
     Compute path from start_vertex to curr_vertex from the predecessor map

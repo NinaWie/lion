@@ -11,8 +11,9 @@ Configuration: Dictionary with the following neceassay and optional parameters
     - pylon_dist_min: minimum cell distance of neighboring pylons (default 3)
     - pylon_dist_max: minimum cell distance of neighboring pylons (default 5)
     - angle_weight: how important is the angle (default 0)
-    - edge_weight: how important are the cable costs compared to pylons (default 0)
-    - max_angle: maximum deviation in angle from the straight connection from start to end (default: pi/2)
+    - edge_weight: importantance of cable costs compared to pylons (default 0)
+    - max_angle: maximum deviation in angle from the straight connection from
+                start to end (default: pi/2)
     - max_angle_lg: maximum angle at a pylon (default: pi/2)
 """
 
@@ -28,7 +29,7 @@ __all__ = [
 ]
 
 
-def transform_instance(instance, fillval=np.max):
+def transform_instance(instance):
     """
     transform instance to get instance and corridor separately
     """
@@ -37,8 +38,11 @@ def transform_instance(instance, fillval=np.max):
     project_region[np.isnan(instance)] = 0
     project_region[instance == np.inf] = 0
     # modify instance to have a 3-dimensional input as required
-    max_val = fillval(instance[~np.isnan(instance)])
+    max_val = np.max(instance[~np.isnan(instance)])
+    min_val = np.min(instance[~np.isnan(instance)])
     instance[np.isnan(instance)] = max_val
+    # normalize the instance values
+    instance = (instance - min_val) / (max_val - min_val)
     # add dimension to instance
     instance = np.array([instance])
     # change new_args here
@@ -106,16 +110,25 @@ def optimal_pylon_spotting(instance, cfg, corridor=None):
 
 
 # ----------------------------------- KSP  ---------------------------------
-def run_ksp(graph, cfg, k, thresh=100, algorithm=KSP.laplace):
+def run_ksp(graph, cfg, k, thresh=None, algorithm=KSP.ksp):
     """
     Build the shortest path trees and compute k diverse shortest paths
     """
+    if thresh is None:
+        # set appropriate threshold automatically
+        inst_size = min(
+            [graph.hard_constraints.shape[0], graph.hard_constraints.shape[1]]
+        )
+        thresh = int(inst_size / 10)
+        if VERBOSE:
+            print("set diversity treshold automatically to", thresh)
+
     # construct sp trees
     tic = time.time()
     _ = graph.sp_trees(**cfg)
     # compute k shortest paths
     ksp_processor = KSP(graph)
-    ksp_out = algorithm(ksp_processor, k, thresh=thresh)
+    ksp_out = algorithm(ksp_processor, k, min_dist=thresh)
     # extract path itself
     ksp_paths = [k[0] for k in ksp_out]
     if VERBOSE:
@@ -123,7 +136,7 @@ def run_ksp(graph, cfg, k, thresh=100, algorithm=KSP.laplace):
     return ksp_paths
 
 
-def ksp_routes(instance, cfg, k, thresh=10, algorithm=KSP.find_ksp):
+def ksp_routes(instance, cfg, k, thresh=None, algorithm=KSP.ksp):
     """
     Compute the (angle-) optimal k diverse shortest paths through a grid
     @params:
@@ -148,7 +161,7 @@ def ksp_routes(instance, cfg, k, thresh=10, algorithm=KSP.find_ksp):
     return run_ksp(graph, cfg, k, thresh=thresh, algorithm=algorithm)
 
 
-def ksp_pylons(instance, cfg, k, thresh=10, algorithm=KSP.find_ksp):
+def ksp_pylons(instance, cfg, k, thresh=None, algorithm=KSP.ksp):
     """
     Compute the (angle-) optimal k diverse shortest path of PYLONS
     @params:

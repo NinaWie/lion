@@ -95,7 +95,7 @@ class AngleGraph():
         shift_lines = List()
         for shift in self.shifts:
             line = ut.bresenham_line(0, 0, shift[0], shift[1])
-            shift_lines.append(np.array(line[1:-1]))
+            shift_lines.append(np.array(line))
         self.shift_lines = shift_lines
 
         # construct shift values for diagonals
@@ -257,17 +257,15 @@ class AngleGraph():
         shift_norms = [np.linalg.norm(s) for s in self.shifts]
         tic = time.time()
         # precompute edge costs
-        if self.edge_weight > 0:
-            self.edge_cost = np.zeros(self.preds.shape) + np.inf
-            self.edge_cost = edge_costs(
-                self.stack_array,
-                self.pos2node, np.array(self.shifts), self.edge_cost,
-                self.edge_inst.copy(), self.shift_lines, self.edge_weight
-            )
-            if self.verbose:
-                print("Computed edge instance")
-        else:
-            self.edge_cost = np.zeros(self.preds.shape)
+        self.edge_cost = np.zeros(self.preds.shape) + np.inf
+        self.edge_cost = edge_costs(
+            self.stack_array, self.pos2node, np.array(self.shifts),
+            self.edge_cost, self.instance, self.edge_inst, self.shift_lines,
+            self.shift_costs, self.edge_weight
+        )
+        if self.verbose:
+            print("Computed edge instance", time.time() - tic)
+        tic = time.time()
         # RUN - either directed acyclic or BF algorithm
         if mode == "BF":
             # TODO: nr iterations argument
@@ -279,8 +277,7 @@ class AngleGraph():
         elif mode == "DAG":
             self.dists, self.preds = sp_dag(
                 self.stack_array, self.pos2node, np.array(self.shifts),
-                self.angle_cost_array, self.dists, self.preds, self.instance,
-                self.edge_cost, self.shift_costs
+                self.angle_cost_array, self.dists, self.preds, self.edge_cost
             )
         else:
             raise ValueError("wrong mode input: " + mode)
@@ -310,8 +307,7 @@ class AngleGraph():
         self.dists_ba, self.preds_ba = sp_dag_reversed(
             self.stack_array, self.pos2node,
             np.array(self.shifts) * (-1), self.angle_cost_array, self.dists_ba,
-            self.instance, self.edge_cost, self.shift_lines, self.edge_weight,
-            self.shift_costs
+            self.edge_cost
         )
         self.time_logs["shortest_path_tree"] = round(time.time() - tic, 3)
         if self.verbose:
@@ -463,6 +459,37 @@ class AngleGraph():
     # -----------------------------------------------------------------------
     # INTERFACE
 
+    def _check_start_dest(self, **kwargs):
+        # assert that start and dest are provided and in project bounds
+        try:
+            self.start_inds = kwargs["start_inds"]
+            self.dest_inds = kwargs["dest_inds"]
+        except KeyError:
+            raise RuntimeError(
+                "Must specify start_inds and dest_inds in cfg dict!"
+            )
+        assert len(self.start_inds) == 2, "start inds must be of length 2"
+        assert len(self.dest_inds) == 2, "dest inds must be of length 2"
+        assert all(
+            [
+                isinstance(self.start_inds[i], int)
+                or float(self.start_inds[i]).is_integer() for i in range(2)
+            ]
+        ), "start inds must be integer!"
+        assert all(
+            [
+                isinstance(self.dest_inds[i], int)
+                or float(self.dest_inds[i]).is_integer() for i in range(2)
+            ]
+        ), "dest inds must be integer!"
+        self.start_inds = np.asarray(self.start_inds).astype(int)
+        self.dest_inds = np.asarray(self.dest_inds).astype(int)
+
+        instance_shape = np.asarray(self.hard_constraints.shape)
+        assert np.all(np.asarray(self.start_inds) < instance_shape) and np.all(
+            np.asarray(self.dest_inds) < instance_shape
+        ), "start or dest not in project region!"
+
     def single_sp(self, power=1, **kwargs):
         """
         Function for full processing to yield shortest path
@@ -478,18 +505,8 @@ class AngleGraph():
                        from start to end (default: pi/2)
             max_angle_lg: maximum angle at a pylon (default: pi/2)
         """
-        # assert that start and dest are provided and in project bounds
-        try:
-            self.start_inds = kwargs["start_inds"]
-            self.dest_inds = kwargs["dest_inds"]
-        except KeyError:
-            raise RuntimeError(
-                "Must specify start_inds and dest_inds in cfg dict!"
-            )
-        instance_shape = np.asarray(self.hard_constraints.shape)
-        assert np.all(np.asarray(self.start_inds) < instance_shape) and np.all(
-            np.asarray(self.dest_inds) < instance_shape
-        ), "start or dest not in project region!"
+        # assert that start and dest exist in kwargs and are in project region
+        self._check_start_dest(**kwargs)
 
         # initialize donut ring and edge costs
         self.set_shift(self.start_inds, self.dest_inds, **kwargs)
@@ -516,6 +533,9 @@ class AngleGraph():
         return path, path_costs, cost_sum
 
     def sp_trees(self, **kwargs):
+        # assert that start and dest exist in kwargs and are in project region
+        self._check_start_dest(**kwargs)
+
         start_inds = kwargs["start_inds"]
         dest_inds = kwargs["dest_inds"]
         path, path_costs, cost_sum = self.single_sp(**kwargs)
