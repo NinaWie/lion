@@ -73,9 +73,8 @@ class KSP:
             )
 
             # add penalty (or inf to exclude regions)
-            corridor = cost_add * corridor / np.max(corridor) + 1
-            corridor[np.isnan(corridor)] = 1
-            feasible_vertices = corridor * min_node_dists
+            corridor[corridor>0] = cost_add * corridor[corridor>0] / np.max(corridor)
+            feasible_vertices = (corridor + 1) * min_node_dists
 
             if ~np.any(feasible_vertices < np.inf):
                 return [self.graph.transform_path(p) for p in best_paths]
