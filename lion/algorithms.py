@@ -5,10 +5,10 @@ given an instance and a configuration file
 Main parameters:
 
 instance: 2D numpy array of resistances values (float or int)
-          If cells are forbidden, set them to NaN or a value x and specify x 
+          If cells are forbidden, set them to NaN or a value x and specify x
           as cfg["forbidden_val"] = x.
 
-cfg - configuration: Dictionary with the following neceassay and optional parameters
+cfg - configuration: Dict with the following neceassay and optional parameters
     + start_inds: list of two cell coordinates
     + dest_inds: list of two cell coordinates
 
@@ -51,15 +51,17 @@ def _initialize_graph(instance, cfg):
     forbidden_val = cfg.get("forbidden_val", np.nan)
     if VERBOSE:
         print("forbidden val", forbidden_val)
-    
+
     # make forbidden region array
     project_region = np.ones(instance.shape)
     project_region[np.isnan(instance)] = 0
     project_region[instance == forbidden_val] = 0
 
     # normalize instance -- necessary to have comparable angle weight
-    normal_vals = instance[np.logical_and(instance != forbidden_val, ~np.isnan(instance))]
-    instance = (instance - np.min(normal_vals)) / (np.max(normal_vals) - np.min(normal_vals))
+    normal_vals = instance[
+        np.logical_and(instance != forbidden_val, ~np.isnan(instance))]
+    instance = (instance - np.min(normal_vals)
+                ) / (np.max(normal_vals) - np.min(normal_vals))
 
     # modify instance to have a 3-dimensional input as required
     instance = np.array([instance])
@@ -93,8 +95,11 @@ def optimal_route(instance, cfg):
     path, _, _ = graph.single_sp(**cfg)
 
     if VERBOSE:
-        print("Overall timefor optimal route", time.time() - tic_raster, graph.time_logs)
-    
+        print(
+            "Overall timefor optimal route",
+            time.time() - tic_raster, graph.time_logs
+        )
+
     return path
 
 
@@ -111,21 +116,6 @@ def optimal_pylon_spotting(instance, cfg, corridor=None):
         a single optimal path of pylons (list of X Y coordinates)
         or empty list if no path exists
     """
-    if corridor is not None:
-        # TODO
-        if isinstance(corridor, np.ndarray) and corridor.shape != 2:
-            raise ValueError("corridor must be a two-dimensional ndarray")
-        # first option: corridor is a path
-        if corridor.shape[1] == 2:
-            pylon_spotting_corr = np.zeros(project_region.shape)
-            for (i, j) in corridor:
-                if project_region[i, j] > 0:
-                    pylon_spotting_corr[i, j] = 1
-            project_region = pylon_spotting_corr * project_region
-        # second option: corridor is given --> intersection of corr and forb
-        else:
-            project_region = corridor * project_region
-
     # initialize graph
     graph, cfg = _initialize_graph(instance, cfg)
     # pylon spotting
@@ -153,7 +143,7 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp, thresh=None):
                 distance. E.g. if thresh = 200, each path will be at least 200
                 cells away at one point from each other path.
                 If None, it is set by default to 1/20 of the instance size
-                
+
                 FOR KSP.min_set_intersection:
                 maximum intersection of the new path with all previous points
                 Must be between 0 and 1. E.g. if 0.2, then at most 20% of cells
@@ -165,7 +155,10 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp, thresh=None):
         else:
             # set appropriate threshold automatically
             inst_size = min(
-                [graph.hard_constraints.shape[0], graph.hard_constraints.shape[1]]
+                [
+                    graph.hard_constraints.shape[0],
+                    graph.hard_constraints.shape[1]
+                ]
             )
             thresh = int(inst_size / 20)
         if VERBOSE:
@@ -192,7 +185,7 @@ def ksp_routes(instance, cfg, k, thresh=None, algorithm=KSP.ksp):
         cfg: config dict, must contain start and dest (see details top of file)
         k: number of paths to compute
         thresh: see doc of run_ksp
-        algorithm: see doc of run_ksp 
+        algorithm: see doc of run_ksp
     @returns:
         A list of paths (each path is again a list of X Y coordinates)
     """

@@ -72,7 +72,8 @@ class KSP:
             )
 
             # add penalty (or inf to exclude regions)
-            corridor[corridor > 0] = cost_add * corridor[corridor > 0] / np.max(corridor)
+            corridor[corridor > 0
+                     ] = cost_add * corridor[corridor > 0] / np.max(corridor)
             feasible_vertices = (corridor + 1) * min_node_dists
 
             if ~np.any(feasible_vertices < np.inf):
@@ -102,8 +103,8 @@ class KSP:
             self.graph.start_inds, self.graph.dest_inds: vertices -->
             list with two entries
             k: int: number of paths to output
-            max_intersection: ratio of vertices that are allowed to be contained in the
-                previously computed SPs
+            max_intersection: ratio of vertices that are allowed to be 
+            contained in the previously computed SPs
         """
         assert 0 <= thresh <= 1, "threshold for min_set_intersection algorithm must be between 0 and 1"
         tic = time.time()
@@ -112,9 +113,13 @@ class KSP:
 
         # sum both dists_ab and dists_ba, subtract inst because counted twice
         (min_node_dists, min_shift_dists) = self.compute_min_node_dists()
-        
+
         # argsort
-        stack_sorted = np.dstack(np.unravel_index(np.argsort(min_node_dists.ravel()), min_node_dists.shape))[0]
+        stack_sorted = np.dstack(
+            np.unravel_index(
+                np.argsort(min_node_dists.ravel()), min_node_dists.shape
+            )
+        )[0]
         # iterate over edges from least to most costly
         sorted_dist_prev = 0
         for x, y in stack_sorted:
@@ -136,7 +141,9 @@ class KSP:
             )
             vertices_path = np.array(vertices_path)
             # compute intersection with previous paths
-            intersection_low_enough = ut_ksp.intersecting_ratio(best_paths, vertices_path, thresh)
+            intersection_low_enough = ut_ksp.intersecting_ratio(
+                best_paths, vertices_path, thresh
+            )
             # if similarity < threshold, add
             if intersection_low_enough:
                 best_paths.append(vertices_path)

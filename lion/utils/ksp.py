@@ -10,6 +10,13 @@ __all__ = [
 
 @jit(nopython=True)
 def compute_eucl(path1, path2, mode="mean"):
+    """
+    Compute Euclideean distance between two paths
+    @param mode: if "mean", then compute the average of the minimum distances
+                of all vertices of path1 to path2 and the other way round,
+                if "max" then the maximum of minimum distances
+    @returns: float indicating the distance
+    """
     min_dists_out = np.zeros(len(path1))
     for p1 in range(len(path1)):
         min_dists = np.zeros(len(path2))
@@ -20,10 +27,22 @@ def compute_eucl(path1, path2, mode="mean"):
         return np.mean(min_dists_out)
     elif mode == "max":
         return np.max(min_dists_out)
+    else:
+        raise NotImplementedError("only mean or max distance are possible")
 
 
 @jit(nopython=True)
 def fast_dilation(path_points, arr_shape, iters=50):
+    """
+    Compute distance transform - indicates dist of each cell to a set of paths
+    @params:
+        path_points : 2D array of shape (n, 2) of cells on previous paths
+        arr_shape : Tuple of integers, shape of raster
+        iters : Maximum distance until which is should be computed
+    @returns:
+        2D raster of shape arr_shape containing the INVERTED distances:
+        0 means more than iters distance, iters means distance 0
+    """
     arr = np.zeros(arr_shape)
     for i in range(len(path_points)):
         arr[path_points[i][0], path_points[i][1]] = 1
@@ -35,9 +54,9 @@ def fast_dilation(path_points, arr_shape, iters=50):
         arr_prev = arr.copy()
         for x in range(start_x - 1, end_x + 2):
             for y in range(start_y - 1, end_y + 2):
-                if arr_prev[x, y] > 0 or arr_prev[x - 1, y] > 0 or arr_prev[
-                    x + 1,
-                    y] > 0 or arr_prev[x, y - 1] > 0 or arr_prev[x, y + 1] > 0:
+                if arr_prev[x, y] > 0 or arr_prev[x - 1, y] > 0 or (
+                    arr_prev[x + 1, y] > 0
+                ) or arr_prev[x, y - 1] > 0 or arr_prev[x, y + 1] > 0:
                     arr[x, y] += 1
         if start_x > 1:
             start_x -= 1
@@ -53,28 +72,41 @@ def fast_dilation(path_points, arr_shape, iters=50):
 
 def intersecting_ratio(path_list, current_path, max_intersection):
     """
-    path_list: numba typed list of arrays
+    Compute whether the new path is intersecting more than max_intersection
+    with the paths in path_list
+
+    path_list: list of arrays of shape (n,2) containing X Y coords of paths
+    current_path: 2Darray of shape (m,2)
+    max_intersection: float between 0 and 1 indicating intersection threshold
     """
     convert_num = np.max(current_path)
-    current_path_converted = current_path[:, 0] * convert_num + current_path[:, 1]
+    current_path_converted = (
+        current_path[:, 0] * convert_num + current_path[:, 1]
+    )
 
     for prev_path_ind in range(len(path_list)):
         # get array
         prev_path = path_list[prev_path_ind]
         prev_path_converted = prev_path[:, 0] * convert_num + prev_path[:, 1]
-        _, inds_intersection, _ = np.intersect1d(current_path_converted, 
-                prev_path_converted, assume_unique=True, return_indices=True)
+        _, inds_intersection, _ = np.intersect1d(
+            current_path_converted,
+            prev_path_converted,
+            assume_unique=True,
+            return_indices=True
+        )
         # delete the ones that have already been found
-        current_path_converted = np.delete(current_path_converted, inds_intersection)
+        current_path_converted = np.delete(
+            current_path_converted, inds_intersection
+        )
 
         # If above threshold already, then return
-        if 1 - len(current_path_converted) / len(current_path) > max_intersection:
+        if 1 - len(current_path_converted
+                   ) / len(current_path) > max_intersection:
             return False
-        
+
     # For all paths the intersection has stayed sufficiently low
     return True
 
-        
 
 def get_sp_from_preds(pred_map, curr_vertex, start_vertex):
     """
@@ -184,7 +216,19 @@ def get_sp_dest_shift(
     dest_edge=False
 ):
     """
-    dest_edge: If it's the edge at destination, we cannot take the current
+    Reconstruct paths from distance and predecessor map with REVERSED
+    edge directions
+    @param
+        dists: 2Darray of distances (from source) for each cell
+        preds: 2Darray, optimal predecessor on path for each cell
+        pos2node: 2Darray, mapping from cell coordinates to vertex index
+        start_inds: list of two values - source
+        dest_inds: list of two values - target
+        shifts: 2Darray of shape (n,2) containing neighbor shifts
+        min_shift: optimal predecessor shift at target (to trace back)
+        dest_edge: Whether to use min_shift or not
+    @returns:
+        list of X, Y coordinates
     """
     if not dest_edge:
         dest_ind = pos2node[tuple(dest_inds)]
@@ -203,6 +247,20 @@ def get_sp_dest_shift(
 def get_sp_start_shift(
     dists, preds, pos2node, start_inds, dest_inds, shifts, min_shift
 ):
+    """
+    Reconstruct paths from distance and predecessor map with REVERSED
+    edge directions
+    @param
+        dists: 2Darray of distances (from source) for each cell
+        preds: 2Darray, optimal predecessor on path for each cell
+        pos2node: 2Darray, mapping from cell coordinates to vertex index
+        start_inds: list of two values - source
+        dest_inds: list of two values - target
+        shifts: 2Darray of shape (n,2) containing neighbor shifts
+        min_shift: optimal predecessor shift at target (to trace back)
+    @returns:
+        list of X, Y coordinates
+    """
     dest_ind_stack = pos2node[tuple(dest_inds)]
     if not np.any(dists[dest_ind_stack, :] < np.inf):
         raise RuntimeWarning("empty path")
