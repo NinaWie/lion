@@ -88,10 +88,10 @@ def edge_costs(
                 bresenham_edge_dist = 0
                 if edge_weight > 0:
                     bres_line = shift_lines[s] + np.array([v_x, v_y])
-                    edge_cost_list = np.zeros(len(bres_line))
+                    edge_cost_list = np.zeros(len(bres_line) - 2)
                     for k in range(1, len(bres_line) - 1):
-                        edge_cost_list[k] = edge_inst[bres_line[k][0],
-                                                      bres_line[k][1]]
+                        edge_cost_list[k - 1] = edge_inst[bres_line[k][0],
+                                                          bres_line[k][1]]
                     # TODO: mean or sum?
                     bresenham_edge_dist = edge_weight * np.mean(edge_cost_list)
                 neigh_ind = pos2node[neigh_x, neigh_y]
