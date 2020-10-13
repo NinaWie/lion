@@ -3,7 +3,8 @@ from numba import jit
 
 __all__ = [
     "get_sp_from_preds", "get_sp_dest_shift", "get_sp_start_shift",
-    "path_distance", "similarity", "pairwise_dists", "_flat_ind_to_inds"
+    "path_distance", "similarity", "pairwise_dists", "_flat_ind_to_inds",
+    "intersecting_ratio"
 ]
 
 
@@ -49,6 +50,31 @@ def fast_dilation(path_points, arr_shape, iters=50):
 
     return arr
 
+
+def intersecting_ratio(path_list, current_path, max_intersection):
+    """
+    path_list: numba typed list of arrays
+    """
+    convert_num = np.max(current_path)
+    current_path_converted = current_path[:, 0] * convert_num + current_path[:, 1]
+
+    for prev_path_ind in range(len(path_list)):
+        # get array
+        prev_path = path_list[prev_path_ind]
+        prev_path_converted = prev_path[:, 0] * convert_num + prev_path[:, 1]
+        _, inds_intersection, _ = np.intersect1d(current_path_converted, 
+                prev_path_converted, assume_unique=True, return_indices=True)
+        # delete the ones that have already been found
+        current_path_converted = np.delete(current_path_converted, inds_intersection)
+
+        # If above threshold already, then return
+        if 1 - len(current_path_converted) / len(current_path) > max_intersection:
+            return False
+        
+    # For all paths the intersection has stayed sufficiently low
+    return True
+
+        
 
 def get_sp_from_preds(pred_map, curr_vertex, start_vertex):
     """

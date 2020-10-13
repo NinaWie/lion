@@ -1,7 +1,6 @@
 import numpy as np
 import time
 import lion.utils.ksp as ut_ksp
-from lion.utils.general import get_distance_surface
 
 
 class KSP:
@@ -45,7 +44,7 @@ class KSP:
                                             min_shift_dists]
         return min_dists_2d, min_shifts_2d
 
-    def ksp(self, k, min_dist=20, cost_add=np.inf):
+    def ksp(self, k, thresh=20, cost_add=np.inf):
         """
         Fast KSP method as tradeoff between diversity and cost
         (add additional cost to the paths found so far)
@@ -69,11 +68,11 @@ class KSP:
             path_points = np.array([p for path in best_paths
                                     for p in path]).astype(int)
             corridor = ut_ksp.fast_dilation(
-                path_points, min_node_dists.shape, iters=min_dist
+                path_points, min_node_dists.shape, iters=thresh
             )
 
             # add penalty (or inf to exclude regions)
-            corridor[corridor>0] = cost_add * corridor[corridor>0] / np.max(corridor)
+            corridor[corridor > 0] = cost_add * corridor[corridor > 0] / np.max(corridor)
             feasible_vertices = (corridor + 1) * min_node_dists
 
             if ~np.any(feasible_vertices < np.inf):
@@ -94,3 +93,56 @@ class KSP:
         if self.graph.verbose:
             print("compute KSP time:", self.graph.time_logs["ksp"])
         return [self.graph.transform_path(p) for p in best_paths]
+
+    def min_set_intersection(self, k, thresh=0.5):
+        """
+        Greedy Find KSP algorithm
+
+        Arguments:
+            self.graph.start_inds, self.graph.dest_inds: vertices -->
+            list with two entries
+            k: int: number of paths to output
+            max_intersection: ratio of vertices that are allowed to be contained in the
+                previously computed SPs
+        """
+        assert 0 <= thresh <= 1, "threshold for min_set_intersection algorithm must be between 0 and 1"
+        tic = time.time()
+
+        best_paths = [np.array(self.graph.best_path)]
+
+        # sum both dists_ab and dists_ba, subtract inst because counted twice
+        (min_node_dists, min_shift_dists) = self.compute_min_node_dists()
+        
+        # argsort
+        stack_sorted = np.dstack(np.unravel_index(np.argsort(min_node_dists.ravel()), min_node_dists.shape))[0]
+        # iterate over edges from least to most costly
+        sorted_dist_prev = 0
+        for x, y in stack_sorted:
+            sorted_dist = min_node_dists[x, y]
+            if sorted_dist == sorted_dist_prev:
+                # on the same path as the vertex before
+                continue
+            if sorted_dist == np.inf:
+                break
+            sorted_dist_prev = sorted_dist
+            s = min_shift_dists[x, y]
+
+            # get shortest path through this node
+            # if self.graph.dists_ba[x1, x2, x3] == 0:
+            # = 0 for inc edges of self.graph.dest_inds_inds (init of dists_ba)
+            # continue
+            vertices_path = self.graph._combined_paths(
+                self.graph.start_inds, self.graph.dest_inds, s, [x, y]
+            )
+            vertices_path = np.array(vertices_path)
+            # compute intersection with previous paths
+            intersection_low_enough = ut_ksp.intersecting_ratio(best_paths, vertices_path, thresh)
+            # if similarity < threshold, add
+            if intersection_low_enough:
+                best_paths.append(vertices_path)
+                if len(best_paths) >= k:
+                    break
+        self.graph.time_logs["ksp"] = round(time.time() - tic, 3)
+        if self.graph.verbose:
+            print("FIND KSP time:", self.graph.time_logs["ksp"])
+        return [self.graph.transform_path(path) for path in best_paths]
