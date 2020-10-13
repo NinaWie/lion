@@ -1,5 +1,5 @@
 import numpy as np
-from lion.utils.general import (bresenham_line, discrete_angle_costs, angle)
+from lion.utils.general import (bresenham_line, compute_angle_cost, angle)
 try:
     # import only required for the watershed transform, so imported
     # only of available in order to reduce dependencies
@@ -119,7 +119,7 @@ def downsample(img, factor, mode="simple", func="mean", compact=0.01):
 def inf_downsample(img, factor, func="mean"):
     """
     TODO: merge with downsample method above
-    Downsampling function to reduce the size of an instance by a certain factor,
+    Downsampling function to reduce the size of an inst by a certain factor,
     but replace only non inf values
     """
     x_len_new = img.shape[1] // factor
@@ -145,7 +145,7 @@ def compute_edge_costs(path, instance):
     Arguments:
         path: list of tuples or 2D numpy array with path coordinates
         instance: 2D np array with resistance values
-    Returns: 
+    Returns:
         A list with the same length as the path, containing the edge cost vals
         (last value is zero because less edges then vertices)
     """
@@ -168,7 +168,7 @@ def compute_angle_costs(path, angle_norm_factor=np.pi / 2, mode="linear"):
     Arguments:
         path: list of tuples or 2D numpy array with path coordinates
         instance: 2D np array with resistance values
-    Returns: 
+    Returns:
         List of same length as path containing angle cost values
         (first and last entry 0 because angle at s and t is irrelevant)
     """
@@ -178,7 +178,7 @@ def compute_angle_costs(path, angle_norm_factor=np.pi / 2, mode="linear"):
         vec1 = path[p + 1] - path[p]
         vec2 = path[p + 2] - path[p + 1]
         ang_out.append(
-            discrete_angle_costs(
+            compute_angle_cost(
                 angle(vec1, vec2), angle_norm_factor, mode=mode
             )
         )
@@ -191,7 +191,7 @@ def compute_raw_angles(path):
     """
     Compute the raw angles along the path (not the cost!)
 
-    Returns: 
+    Returns:
         List of same length as path containing angle cost values
         (first and last entry 0 because angle at s and t is irrelevant)
     """

@@ -4,7 +4,7 @@ from scipy.ndimage.morphology import binary_dilation
 from scipy.spatial.distance import cdist
 
 __all__ = [
-    "get_half_donut", "angle", "discrete_angle_costs", "bresenham_line",
+    "get_half_donut", "angle", "compute_angle_cost", "bresenham_line",
     "angle_360"
 ]
 
@@ -141,7 +141,7 @@ def get_half_donut(radius_low, radius_high, vec, angle_max=0.5 * np.pi):
     return new_tuples
 
 
-def discrete_angle_costs(ang, max_angle_lg, mode="linear"):
+def compute_angle_cost(ang, max_angle_lg, mode="linear"):
     """
     Implementation of different angle cost functions:
         linear: cost increases linearly with the angle
@@ -163,8 +163,10 @@ def discrete_angle_costs(ang, max_angle_lg, mode="linear"):
             return 0.3
         elif ang <= np.pi / 3:
             return 0.6
-        else:
+        elif ang <= max_angle_lg:
             return 1
+        else:
+            return np.inf
     else:
         raise NotImplementedError
 
@@ -205,7 +207,7 @@ def get_lg_donut(
                 ang = angle([-k, -l], [i, j])
                 # if smaller max angle and general outgoing half
                 if ang <= max_angle_lg and k * vec[0] + l * vec[1] >= 0:
-                    angle_norm = discrete_angle_costs(ang, max_angle_lg)
+                    angle_norm = compute_angle_cost(ang, max_angle_lg)
                     linegraph_tuples.append([[i, j], [k, l], angle_norm])
     return linegraph_tuples
 

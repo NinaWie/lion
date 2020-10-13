@@ -3,12 +3,7 @@ import lion.utils.costs as ut_cost
 import lion.utils.ksp as ut_ksp
 
 from lion.fast_shortest_path import (
-    sp_dag,
-    sp_dag_reversed,
-    topological_sort_jit,
-    del_after_dest,
-    edge_costs,
-    sp_bf  # , efficient_update_sp
+    sp_dag, sp_dag_reversed, topological_sort_jit, edge_costs, sp_bf
 )
 import warnings
 import numpy as np
@@ -46,23 +41,6 @@ class AngleGraph():
         inf_corr[inf_corr > 0] = np.inf
         self.cost_rest = self.cost_instance + inf_corr
 
-    def _precompute_angles(self):
-        tic = time.time()
-        angles_all = np.zeros((len(self.shifts), len(self.shifts)))
-        angles_all += np.inf
-        for i in range(len(self.shifts)):
-            for j, s in enumerate(self.shifts):
-                ang = ut.angle(s, self.shifts[i])
-                if ang <= self.angle_norm_factor:
-                    angles_all[i, j] = ut.discrete_angle_costs(
-                        ang, self.angle_norm_factor
-                    )
-        self.time_logs["compute_angles"] = round(time.time() - tic, 3)
-        # multiply with angle weights, need to prevent that not inf * 0
-        angles_all[angles_all < np.inf
-                   ] = angles_all[angles_all < np.inf] * self.angle_weight
-        return angles_all
-
     def set_shift(
         self,
         start,
@@ -70,7 +48,6 @@ class AngleGraph():
         pylon_dist_min=3,
         pylon_dist_max=5,
         max_angle=np.pi / 2,
-        max_angle_lg=np.pi / 2,
         **kwargs
     ):
         """
@@ -81,7 +58,6 @@ class AngleGraph():
         """
         self.start_inds = np.asarray(start)
         self.dest_inds = np.asarray(dest)
-        self.angle_norm_factor = max_angle_lg
         vec = self.dest_inds - self.start_inds
         shifts = ut.get_half_donut(
             pylon_dist_min, pylon_dist_max, vec, angle_max=max_angle
@@ -177,9 +153,9 @@ class AngleGraph():
         self.cost_rest[:, dest_inds[0],
                        dest_inds[1]] = self.cost_instance[:, dest_inds[0],
                                                           dest_inds[1]]
-        self.cost_rest[:, start_inds[0],
-                       start_inds[1]] = self.cost_instance[:, start_inds[0],
-                                                           start_inds[1]]
+        self.cost_rest[:, start_inds[0], start_inds[1]] = (
+            self.cost_instance[:, start_inds[0], start_inds[1]]
+        )
 
         self.start_inds = start_inds
         self.dest_inds = dest_inds
@@ -189,6 +165,8 @@ class AngleGraph():
         layer_classes=["resistance"],
         class_weights=[1],
         angle_weight=0,
+        max_angle_lg=np.pi,
+        angle_cost_function='linear',
         **kwargs
     ):
         """
@@ -205,11 +183,15 @@ class AngleGraph():
         ), f"classes ({len(layer_classes)}) and\
             instance layers ({len(self.cost_rest)}) must be of same length!"
 
+        assert 0 <= angle_weight <= 1, "angle weight must be between 0 and 1"
         # set weights and add angle weight
         self.cost_classes = ["angle"] + list(layer_classes)
-        ang_weight_norm = angle_weight * np.sum(class_weights)
-        self.cost_weights = np.array([ang_weight_norm] + list(class_weights))
-        # print("class weights", class_weights)
+        # ang_weight_norm = angle_weight * np.sum(class_weights)
+        # self.cost_weights = np.array([ang_weight_norm] + list(class_weights))
+        self.cost_weights = np.array(
+            [angle_weight] +
+            list(np.asarray(class_weights) * (1 - angle_weight))
+        )
         self.cost_weights = self.cost_weights / np.sum(self.cost_weights)
         if self.verbose:
             print("cost weights", self.cost_weights)
@@ -217,7 +199,9 @@ class AngleGraph():
         # set angle weight and already multiply with angles
         self.angle_weight = self.cost_weights[0]
         # in precomute angles, it is multiplied with angle weights
-        self.angle_cost_array = self._precompute_angles()
+        self.angle_cost_array = self._precompute_angles(
+            max_angle_lg, angle_cost_function
+        )
 
         # define instance by weighted sum
         self.instance = np.sum(
@@ -243,6 +227,47 @@ class AngleGraph():
         self.time_logs["add_all_edges"] = round(time.time() - tic, 3)
         if self.verbose:
             print("instance shape", self.instance.shape)
+
+    def _precompute_angles(self, max_angle_lg, angle_cost_function):
+        """
+        Helper function to precompute the angle costs for all tuples of edges
+        Arguments:
+            max_angle_lg: maximum feasible angle
+            angle_cost_function: funct to compute cost dependent on the angle
+                        currently implemented: linear and one discrete option
+        """
+        self.angle_cost_function = angle_cost_function
+        tic = time.time()
+
+        # compute raw angle values
+        angles_raw = np.array(
+            [[ut.angle(s2, s1) for s1 in self.shifts] for s2 in self.shifts]
+        )
+        # compute feasible maximum value
+        max_angle = np.max(angles_raw[angles_raw <= max_angle_lg])
+        self.angle_norm_factor = max_angle
+
+        # compute angle costs (and normalize)
+        slen = len(self.shifts)
+        angles_all = np.array(
+            [
+                [
+                    ut.compute_angle_cost(
+                        angles_raw[i, j],
+                        self.angle_norm_factor,
+                        mode=self.angle_cost_function
+                    ) for i in range(slen)
+                ] for j in range(slen)
+            ]
+        )
+        # greater than 1 (normalized) means infeasible angle
+        angles_all[angles_all > 1] = np.inf
+
+        self.time_logs["compute_angles"] = round(time.time() - tic, 3)
+        # multiply with angle weights, need to prevent that not inf * 0
+        angles_all[angles_all < np.inf
+                   ] = angles_all[angles_all < np.inf] * self.angle_weight
+        return angles_all
 
     # --------------------------------------------------------------------
     # SHORTEST PATH COMPUTATION
@@ -380,7 +405,9 @@ class AngleGraph():
             [self.cost_instance[:, p[0], p[1]] for p in path]
         )
         # include angle costs
-        ang_costs = ut_cost.compute_angle_costs(path, self.angle_norm_factor)
+        ang_costs = ut_cost.compute_angle_costs(
+            path, self.angle_norm_factor, mode=self.angle_cost_function
+        )
         # prevent that inf * 0 if zero edge weight
         edge_costs = 0
         if self.edge_weight != 0:

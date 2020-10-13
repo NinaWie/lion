@@ -49,7 +49,7 @@ class TestImplicitLG(unittest.TestCase):
             verbose=0
         )
         path, path_costs, cost_sum = graph.single_sp(**vars(self.cfg))
-        self.assertListEqual(graph.cost_weights.tolist(), [0.2, 0.8])
+        self.assertListEqual(graph.cost_weights.tolist(), [0.25, 0.75])
         self.assertTupleEqual(graph.instance.shape, self.expl_shape)
         self.assertEqual(np.sum(graph.cost_weights), 1)
         self.assertNotEqual(len(graph.shifts), 0)
@@ -57,7 +57,7 @@ class TestImplicitLG(unittest.TestCase):
         # self.assertTrue(not np.any([graph.dists[graph.dists < np.inf]]))
         # start point was set to normalized value
         start_ind = graph.pos2node[tuple(self.start_inds)]
-        self.assertEqual(0.8, graph.dists[start_ind, 0])
+        self.assertEqual(0, graph.dists[start_ind, 0])
         # all start dists have same value
         self.assertEqual(len(np.unique(graph.dists[start_ind])), 1)
         # not all values still inf
@@ -83,24 +83,33 @@ class TestImplicitLG(unittest.TestCase):
         )
         self.cfg.angle_weight = 0
         self.cfg.edge_weight = 0.5
-        path, path_costs, cost_sum = graph.single_sp(**vars(self.cfg))
-        self.cfg.angle_weight = 0.25
-        self.cfg.edge_weight = 0
+        path, _, cost_sum = graph.single_sp(**vars(self.cfg))
         dest_ind = graph.pos2node[tuple(self.dest_inds)]
         dest_costs = np.min(graph.dists[dest_ind])
-        dest_costs_gt = len(path)  # everywhere 1
         a = []
         path = np.array(path)
+        weighted_inst = self.example_inst
         for p in range(len(path) - 1):
             line = bresenham_line(
                 path[p, 0], path[p, 1], path[p + 1, 0], path[p + 1, 1]
             )[1:-1]
-            line_costs = [self.example_inst[i, j] for (i, j) in line]
+            line_costs = [weighted_inst[i, j] for (i, j) in line]
             line_costs = [l for l in line_costs if l < np.inf]
-            a.append(np.mean(line_costs) * 0.5)
-        dest_costs_gt += np.sum(a)
-        self.assertEqual(dest_costs, dest_costs_gt)
-        self.assertEqual(dest_costs, cost_sum)
+            bresenham_edge_dist = np.mean(line_costs) * self.cfg.edge_weight
+            shift_costs = np.linalg.norm(path[p] - path[p + 1])
+            # append edge cost
+            a.append(
+                shift_costs * (
+                    0.5 * (
+                        weighted_inst[tuple(path[p])] +
+                        weighted_inst[tuple(path[p + 1])]
+                    ) + bresenham_edge_dist
+                )
+            )
+        dest_costs_gt = np.sum(a)
+        self.assertTrue(np.isclose(dest_costs, dest_costs_gt))
+        self.cfg.angle_weight = 0.25
+        self.cfg.edge_weight = 0
 
     def test_angle_sp(self) -> None:
         graph = AngleGraph(
@@ -109,7 +118,7 @@ class TestImplicitLG(unittest.TestCase):
             n_iters=10,
             verbose=0
         )
-        path, path_costs, cost_sum = graph.single_sp(**vars(self.cfg))
+        _ = graph.single_sp(**vars(self.cfg))
         # assert that destination can NOT be reached
         dest_ind = graph.pos2node[tuple(self.dest_inds)]
         self.assertFalse(np.min(graph.dists[dest_ind]) < np.inf)
