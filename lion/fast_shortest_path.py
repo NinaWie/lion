@@ -5,14 +5,15 @@ import numpy as np
 @jit(nopython=True)
 def topological_sort_jit(v_x, v_y, shifts, to_visit, stack, curr_ind):
     """
-    Fast C++ (numba) recursive method for topological sorting
+    Recursive method for topological sorting of vertices in a DAG
+
     Arguments:
-        v_x, v_y: current vertex
+        v_x, v_y: current vertex / cell
         shifts: array of length n_neighborsx2 to iterate over neighbors
         to_visit: 2D array of size of instance to remember visited nodes
         stack: list of topologically sorted vertices
     Returns:
-        stack
+        stack of sorted cells
     """
     x_len, y_len = to_visit.shape
     # Mark the current node as visited.
@@ -36,6 +37,9 @@ def topological_sort_jit(v_x, v_y, shifts, to_visit, stack, curr_ind):
 
 @jit(nopython=True)
 def del_after_dest(stack, d_x, d_y):
+    """
+    Helper method to use only the relevant part of the stack
+    """
     for i in range(len(stack)):
         if stack[i, 0] == d_x and stack[i, 1] == d_y:
             return stack[i:]
@@ -43,64 +47,86 @@ def del_after_dest(stack, d_x, d_y):
 
 @jit(nopython=True)
 def edge_costs(
-    stack, pos2node, shifts, edge_cost, edge_inst, shift_lines, edge_weight
+    stack, pos2node, shifts, edge_cost, instance, edge_inst, shift_lines,
+    shift_costs, edge_weight
 ):
     """
-    Pre-compute all edge costs
+    Pre-compute all costs on each edge from pylon and cable resistances
+
+    Arguments:
+        stack: np array of shape (n,2): order in which to consider the vertices
+            MUST BE TOPOLOGICALLY SORTED for this algorithm to work
+        pos2node: 2D ndarray with pos2node[x,y] = index of cell (x,y) in stack
+        shifts: np array of size (x,2), indicating the neighborhood for each
+            vertex
+        edge_cost: 2Darray of size (n, len(shifts)), initially all inf
+        instance: 2Darray of pylon resistance values for each cell
+        edge_inst: 2Darray with resistances to traverse this cell with a cable
+                   (often same as instance)
+        shift_lines: numba typed List filled with len(shifts) np arrays,
+                    each array of shape (x,2) is the Bresenham line connecting
+                    a cell to one of its neighbors
+        shift_costs: 1Darray of length len(shift) containing the Euclidean
+                    length to each neighbor
+        edge_weight: Weight defining importance of cable costs (=resistance to
+                    traverse cell with a cable) compared ot pylon costs
     """
     edge_inst_len_x, edge_inst_len_y = edge_inst.shape
     # print(len(stack))
     for i in range(len(stack)):
         v_x = stack[i, 0]
         v_y = stack[i, 1]
+        vertex_costs = instance[v_x, v_y]
         for s in range(len(shifts)):
             neigh_x = v_x + shifts[s][0]
             neigh_y = v_y + shifts[s][1]
             if (
                 0 <= neigh_x < edge_inst_len_x
                 and 0 <= neigh_y < edge_inst_len_y
-                and edge_inst[neigh_x, neigh_y] < np.inf
                 and pos2node[neigh_x, neigh_y] >= 0
             ):
-                bres_line = shift_lines[s] + np.array([v_x, v_y])
-                edge_cost_list = np.zeros(len(bres_line))
-                for k in range(len(bres_line)):
-                    edge_cost_list[k] = edge_inst[bres_line[k, 0],
-                                                  bres_line[k, 1]]
+                bresenham_edge_dist = 0
+                if edge_weight > 0:
+                    bres_line = shift_lines[s] + np.array([v_x, v_y])
+                    edge_cost_list = np.zeros(len(bres_line))
+                    for k in range(1, len(bres_line) - 1):
+                        edge_cost_list[k] = edge_inst[bres_line[k][0],
+                                                      bres_line[k][1]]
+                    # TODO: mean or sum?
+                    bresenham_edge_dist = edge_weight * np.mean(edge_cost_list)
                 neigh_ind = pos2node[neigh_x, neigh_y]
-                edge_cost[neigh_ind, s] = edge_weight * np.mean(edge_cost_list)
+                edge_cost[neigh_ind, s] = shift_costs[s] * (
+                    0.5 * (vertex_costs + instance[neigh_x, neigh_y]) +
+                    bresenham_edge_dist
+                )
     return edge_cost
 
 
 @jit(nopython=True)
-def sp_dag(
-    stack, pos2node, shifts, angles_all, dists, preds, instance, edge_cost,
-    shift_costs
-):
+def sp_dag(stack, pos2node, shifts, angles_all, dists, preds, edge_cost):
     """
     Angle-weighted dynamic program for Directed Acyclic Graphs (O(n))
-    Implemented with numba for performance
+    Stores the distances and predecessors for all IN edges for each vertex
 
     Arguments:
-        n_iters: Int - At most the number of vertices in the graph, if known
-            then the maximum length of the shortest path
-        stack: List of tuples - order in which to consider the vertices
+        stack: np array of shape (n,2): order in which to consider the vertices
             MUST BE TOPOLOGICALLY SORTED for this algorithm to work
+        pos2node: 2D ndarray with pos2node[x,y] = index of cell (x,y) in stack
         shifts: np array of size (x,2) --> indicating the neighborhood for each
             vertex
-        angles_all: np array, angle cost for each shift (precomputed)
-        dists: np array of size m --> indicates distance of each edge from the
-            source vertex
-        preds: np array of size m --> indicates predecessor for each edge
-        instance: 2D array, for each vertex the cost
-        edge_cost: np array of size m --> edge cost for each edge
+        angles_all: 2Darray of size (len(shifts), len(shifts))
+                    precomputed angle cost for each tuple of edges
+        dists: 2Darray of size (n, len(shifts)) - contains distance of each
+               edge from the source vertex
+        preds: 2Darray of size (n, len(shifts)) - contains optimal predecessor
+               of each edge from the source vertex
+        edge_cost: 2Darray of size (n, len(shifts)) - edge cost for each edge
     """
-    inst_x_len, inst_y_len = instance.shape
+    inst_x_len, inst_y_len = pos2node.shape
     # print(len(stack))
     for i in range(len(dists)):
         v_x = stack[i, 0]
         v_y = stack[i, 1]
-        vertex_costs = instance[v_x, v_y]
         for s in range(len(shifts)):
             neigh_x = int(v_x + shifts[s][0])
             neigh_y = int(v_y + shifts[s][1])
@@ -111,14 +137,11 @@ def sp_dag(
                 neigh_stack_ind = pos2node[neigh_x, neigh_y]
                 # add up pylon cost + angle cost + edge cost
                 cost_per_angle = dists[i] + angles_all[s]
-                # distance times pylon average plus edge costs
-                edge_itself = shift_costs[s] * (
-                    0.5 * (vertex_costs + instance[neigh_x, neigh_y]) +
-                    edge_cost[neigh_stack_ind, s]
-                )
+
                 # update distances and predecessors
                 dists[neigh_stack_ind,
-                      s] = np.min(cost_per_angle) + edge_itself
+                      s] = np.min(cost_per_angle) + edge_cost[neigh_stack_ind,
+                                                              s]
                 preds[neigh_stack_ind, s] = np.argmin(cost_per_angle)
     return dists, preds
 
@@ -157,21 +180,32 @@ def average_lcp(stack, shifts, angles_all, dists, preds, instance, edge_cost):
 
 
 @jit(nopython=True)
-def sp_dag_reversed(
-    stack, pos2node, shifts, angles_all, dists, instance, edge_cost,
-    shift_lines, edge_weight, shift_costs
-):
+def sp_dag_reversed(stack, pos2node, shifts, angles_all, dists, edge_cost):
     """
-    Compute cumulative distances from TARGET vertex
+    Angle-weighted dynamic program for Directed Acyclic Graphs (O(n))
+    Stores the distances and predecessors for all OUT edges for each vertex
+
+    Arguments:
+        stack: np array of shape (n,2): order in which to consider the vertices
+            MUST BE TOPOLOGICALLY SORTED for this algorithm to work
+        pos2node: 2D ndarray with pos2node[x,y] = index of cell (x,y) in stack
+        shifts: np array of size (x,2) --> indicating the neighborhood for each
+            vertex
+        angles_all: 2Darray of size (len(shifts), len(shifts))
+                    precomputed angle cost for each tuple of edges
+        dists: 2Darray of size (n, len(shifts)) - contains distance of each
+               edge from the source vertex
+        preds: 2Darray of size (n, len(shifts)) - contains optimal predecessor
+               of each edge from the source vertex
+        edge_cost: 2Darray of size (n, len(shifts)) - edge cost for each edge
     """
-    inst_len_x, inst_len_y = instance.shape
+    inst_len_x, inst_len_y = pos2node.shape
     preds = np.zeros(dists.shape) - 1
 
     # update OUTGOING edge distances
     for i in range(len(stack)):
         v_x = stack[-i - 1, 0]
         v_y = stack[-i - 1, 1]
-        vertex_costs = instance[v_x, v_y]
         for s in range(len(shifts)):
             neigh_x = v_x + shifts[s][0]
             neigh_y = v_y + shifts[s][1]
@@ -180,15 +214,9 @@ def sp_dag_reversed(
                 inst_len_x) and (0 <= neigh_y < inst_len_y
                                  ) and (pos2node[neigh_x, neigh_y] >= 0):
 
-                # compute the general edge cost (without angle and dist)
-                edge_itself = shift_costs[s] * (
-                    0.5 * (vertex_costs + instance[neigh_x, neigh_y]) +
-                    edge_cost[-i - 1, s]
-                )
-
                 # beginning: only update out edges of destination
                 if i == 0:
-                    dists[-1, s] = edge_itself
+                    dists[-1, s] = edge_cost[-i - 1, s]
                     continue
 
                 # iterate over incoming edges to find minimum
@@ -205,10 +233,10 @@ def sp_dag_reversed(
                         in_neigh_ind = pos2node[in_neigh_x, in_neigh_y]
                         curr_angle_cost = dists[in_neigh_ind,
                                                 s2] + angles_all[s, s2]
-                    if curr_angle_cost < min_angle_cost:
-                        min_angle_cost = curr_angle_cost
-                        min_angle_index = s2
-                dists[-i - 1, s] = min_angle_cost + edge_itself
+                        if curr_angle_cost < min_angle_cost:
+                            min_angle_cost = curr_angle_cost
+                            min_angle_index = s2
+                dists[-i - 1, s] = min_angle_cost + edge_cost[-i - 1, s]
                 preds[-i - 1, s] = min_angle_index
     return dists, preds
 
@@ -218,7 +246,8 @@ def sp_bf(
     n_iters, stack, shifts, angles_all, dists, preds, instance, edge_cost
 ):
     """
-    Angle-weighted Bellman Ford algorithm (General graph)
+    Angle-weighted Bellman Ford algorithm for a general graph (not DAG)
+    - stack does not need to be sorted
     Implemented with numba for performance - O(lm) where l is the
     maximum length of the shortest path
 
@@ -262,14 +291,28 @@ def sp_bf(
 
 @jit(nopython=True)
 def efficient_update_sp(
-    stack, pos2node, shifts, angles_all, dists, preds, instance, edge_cost
+    stack, pos2node, shifts, angles_all, dists, preds, edge_cost
 ):
     """
     Implemented more efficient method for angle updates
     Corresponds to sp_dag, but with improved runtime (O(k log k + l) instead)
     of O(kl) for a vertex update with k incoming and l outgoing edges
+
+    Arguments:
+        stack: np array of shape (n,2): order in which to consider the vertices
+            MUST BE TOPOLOGICALLY SORTED for this algorithm to work
+        pos2node: 2D ndarray with pos2node[x,y] = index of cell (x,y) in stack
+        shifts: np array of size (x,2) --> indicating the neighborhood for each
+            vertex
+        angles_all: 2Darray of size (len(shifts), len(shifts))
+                    precomputed angle cost for each tuple of edges
+        dists: 2Darray of size (n, len(shifts)) - contains distance of each
+               edge from the source vertex
+        preds: 2Darray of size (n, len(shifts)) - contains optimal predecessor
+               of each edge from the source vertex
+        edge_cost: 2Darray of size (n, len(shifts)) - edge cost for each edge
     """
-    inst_x_len, inst_y_len = instance.shape
+    inst_x_len, inst_y_len = pos2node.shape
     n_neighbors = len(shifts)
 
     # Iterate over vertices
@@ -283,7 +326,6 @@ def efficient_update_sp(
         marked_minus = np.zeros(n_neighbors)
 
         # initialize dists and do first pass
-        neighbor_vals = np.zeros(n_neighbors) + np.inf
         neighbor_inds = np.zeros(n_neighbors) - 1
 
         for s in range(n_neighbors):
@@ -292,14 +334,12 @@ def efficient_update_sp(
             if (
                 0 <= neigh_x < inst_x_len and 0 <= neigh_y < inst_y_len
                 and pos2node[neigh_x, neigh_y] >= 0
-                and instance[neigh_x, neigh_y] < np.inf
             ):
-                neighbor_vals[s] = instance[neigh_x, neigh_y]
                 neigh_stack_ind = pos2node[neigh_x, neigh_y]
                 neighbor_inds[s] = neigh_stack_ind
                 # initialize distances to the straight line value
-                dists[neigh_stack_ind, s] = dists[i, s] + instance[
-                    neigh_x, neigh_y] + edge_cost[neigh_stack_ind, s]
+                dists[neigh_stack_ind,
+                      s] = dists[i, s] + edge_cost[neigh_stack_ind, s]
                 preds[neigh_stack_ind, s] = s
 
         # set current tuple: in edge and shift
@@ -329,13 +369,11 @@ def efficient_update_sp(
             neigh_stack_ind = int(neighbor_inds[current_out_edge])
 
             if marked == 0 and neigh_stack_ind >= 0 and np.around(
-                update_val + neighbor_vals[current_out_edge] +
-                edge_cost[neigh_stack_ind, current_out_edge], 5
+                update_val + edge_cost[neigh_stack_ind, current_out_edge], 5
             ) <= np.around(dists[neigh_stack_ind, current_out_edge], 5):
                 dists[neigh_stack_ind,
-                      current_out_edge] = update_val + neighbor_vals[
-                          current_out_edge] + edge_cost[neigh_stack_ind,
-                                                        current_out_edge]
+                      current_out_edge] = update_val + edge_cost[
+                          neigh_stack_ind, current_out_edge]
                 preds[neigh_stack_ind, current_out_edge] = current_in_edge
 
                 # progress one edge further

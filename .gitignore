@@ -8,6 +8,7 @@ __pycache__/
 
 # jupyter
 *ipynb
+*.npy
 
 # Distribution / packaging
 .Python
