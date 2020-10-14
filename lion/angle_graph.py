@@ -52,9 +52,11 @@ class AngleGraph():
     ):
         """
         Initialize shift variable by getting the donut values
-        :param pylon_dist_min, pylon_dist_max: min and max distance of pylons
-        :param vec: vector of diretion of edges
-        :param max_angle: Maximum angle of edges to vec
+
+        Arguments:
+            start, dest: list containing X and Y coordinate of source / dest
+            pylon_dist_min, pylon_dist_max: min and max distance of pylons
+            max_angle: Maximum angle of edges to vec
         """
         self.start_inds = np.asarray(start)
         self.dest_inds = np.asarray(dest)
@@ -78,6 +80,9 @@ class AngleGraph():
         self.shift_costs = np.array([np.linalg.norm(s) for s in self.shifts])
 
     def add_nodes(self):
+        """
+        Initialize distances and predecessors, sort vertices topologically
+        """
         tic = time.time()
         # SORT --> Make stack
         visit_points = (self.instance < np.inf).astype(int)
@@ -129,6 +134,10 @@ class AngleGraph():
         self, corridor, start_inds, dest_inds, sample_func="mean",
         sample_method="simple", factor_or_n_edges=1
     ):  # yapf: disable
+        """
+        Function to downsample instance in restricted corridor for the
+        iterative pipeline approach
+        """
         # assert factor_or_n_edges == 1, "pipeline not implemented yet"
         corridor = (corridor > 0).astype(int) * (self.hard_constraints >
                                                  0).astype(int)
@@ -170,7 +179,20 @@ class AngleGraph():
         **kwargs
     ):
         """
-        angle_weight: how to consider angles in contrast to all other costs!
+        Define the resistances / costs to represent on graph edges
+        (Combines class-wise resistances and angle weights)
+
+        Arguments:
+            layer_classes: List of strings, names of cost categories
+            class_weights: List of same length as layer_classes, corresponding
+                weights (normalized automatically, can be any positive number)
+            angle_weight: Importance of angle costs compared to resistances
+                (=0 means only resistance is optimized, =1 means only angles
+                are minimized, i.e. output will be straightest line possible)
+            max_angle_lg: maximum angle between a adjacent edges on the path
+            angle_cost_function: Currently implemented "linear" and "discrete"
+                        Function defines the cost per angle, implemented in
+                        utils/general.py (function compute_angle_cost)
         """
         tic = time.time()
         assert len(layer_classes) == len(
@@ -184,10 +206,9 @@ class AngleGraph():
             instance layers ({len(self.cost_rest)}) must be of same length!"
 
         assert 0 <= angle_weight <= 1, "angle weight must be between 0 and 1"
-        # set weights and add angle weight
+        # set classes
         self.cost_classes = ["angle"] + list(layer_classes)
-        # ang_weight_norm = angle_weight * np.sum(class_weights)
-        # self.cost_weights = np.array([ang_weight_norm] + list(class_weights))
+        # set weights and add angle weight
         self.cost_weights = np.array(
             [angle_weight] +
             list(np.asarray(class_weights) * (1 - angle_weight))
@@ -526,7 +547,9 @@ class AngleGraph():
         Optional parameters:
             pylon_dist_min: min cell distance of neighboring pylons (default 3)
             pylon_dist_max: min cell distance of neighboring pylons (default 5)
-            angle_weight: how important is the angle (default 0)
+            angle_weight: Importance of angle costs compared to resistances
+                (=0 means only resistance is optimized, =1 means only angles
+                are minimized, i.e. output will be straightest line possible)
             edge_weight: importance of cable costs vs pylon costs (default 0)
             max_angle: maximum deviation in angle from the straight connection
                        from start to end (default: pi/2)
@@ -560,11 +583,12 @@ class AngleGraph():
         return path, path_costs, cost_sum
 
     def sp_trees(self, **kwargs):
-        # assert that start and dest exist in kwargs and are in project region
-        self._check_start_dest(**kwargs)
-
-        start_inds = kwargs["start_inds"]
-        dest_inds = kwargs["dest_inds"]
+        """
+        Compute shortest path trees from both directions (Eppstein distances)
+        necessary for finding multiple paths
+        """
+        # Build shortest path tree rooted in source
         path, path_costs, cost_sum = self.single_sp(**kwargs)
-        self.get_shortest_path_tree(start_inds, dest_inds)
+        # Build shortest path tree rooted in target
+        self.get_shortest_path_tree(self.start_inds, self.dest_inds)
         return path, path_costs, cost_sum
