@@ -80,26 +80,6 @@ def rescale(instance, corridor, cfg, factor):
         return instance, corridor, cfg
 
 
-def upscale_corr(instance_corr, downsampled_corr, factor):
-    """
-    change instance corr according to values in downsampled
-    Arguments:
-        instance_corr: original hard constraints (2D np array)
-        downsampled_corr: new hard constraints in lower dimension
-    """
-    instance_corr_new = np.zeros(instance_corr.shape)
-    x_len, y_len = instance_corr.shape
-    new_x_len = x_len // factor
-    new_y_len = y_len // factor
-    for x in range(x_len):
-        for y in range(y_len):
-            new_x, new_y = x // factor, y // factor
-            if new_x < new_x_len and new_y < new_y_len:
-                if downsampled_corr[new_x, new_y]:
-                    instance_corr_new[x, y] = instance_corr[x, y]
-    return instance_corr_new
-
-
 def get_donut(radius_low, radius_high):
     """
     Compute all indices of points in donut around (0,0)
