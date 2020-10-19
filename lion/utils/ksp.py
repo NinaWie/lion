@@ -4,7 +4,7 @@ from numba import jit
 __all__ = [
     "get_sp_from_preds", "get_sp_dest_shift", "get_sp_start_shift",
     "path_distance", "similarity", "pairwise_dists", "_flat_ind_to_inds",
-    "intersecting_ratio"
+    "intersecting_ratio", "fast_dilation"
 ]
 
 
