@@ -22,11 +22,23 @@ cfg - configuration: Dict with the following neceassay and optional parameters
             start to end (default: pi/2)
     - max_angle_lg: maximum angle at a pylon (default: pi)
     - angle_cost_function: 'linear' and 'discrete' are implemented
+    - memory_limit: default is 1 trillion, if the number of edges is higher,
+            an iterative pipeline procedure is used
+    - pipeline: pipeline in iterative approach is set automatically based on
+            the memory limit. It can however be set manually as well, e.g.
+            [(4,50), (2,10)] means downsample by factor of 4, compute optimal
+            path, reduce region of interest to a corridor of width 50 around
+            optimal path, again downsample by factor of 2
+    - cable_allowed: If True, then forbidden areas can still be traversed with
+            a cable (only placing a pylon is forbidden)
+            If False, then forbidden areas can not be traversed either
 """
 
 import numpy as np
 from lion.angle_graph import AngleGraph
 from lion.ksp import KSP
+import lion.utils.general as ut_general
+import matplotlib.pyplot as plt
 import time
 
 VERBOSE = 0
@@ -60,11 +72,15 @@ def _initialize_graph(instance, cfg):
     # normalize instance -- necessary to have comparable angle weight
     normal_vals = instance[
         np.logical_and(instance != forbidden_val, ~np.isnan(instance))]
+    assert np.all(
+        normal_vals < np.inf
+    ), "check forbidden_val parameter in cfg, it is\
+         not inf but there are inf values in array"
+
+    # fill values in instance
+    instance[project_region == 0] = np.max(normal_vals)
     instance = (instance - np.min(normal_vals)
                 ) / (np.max(normal_vals) - np.min(normal_vals))
-
-    # modify instance to have a 3-dimensional input as required
-    instance = np.array([instance])
 
     # init graph
     graph = AngleGraph(instance, project_region, verbose=VERBOSE)
@@ -118,8 +134,50 @@ def optimal_pylon_spotting(instance, cfg, corridor=None):
     """
     # initialize graph
     graph, cfg = _initialize_graph(instance, cfg)
-    # pylon spotting
-    path, _, _ = graph.single_sp(**cfg)
+    # initial project region
+    original_inst = graph.edge_inst.copy()
+    original_corr = (graph.instance < np.inf).astype(int)
+    # initialize corridor
+    if corridor is None:
+        corridor = np.ones(original_corr.shape)
+
+    # estimate how many edges the graph will have:
+    graph.set_shift(cfg["start_inds"], cfg["dest_inds"], **cfg)
+    orig_shifts = len(graph.shift_tuples)
+    instance_vertices = np.sum(original_corr * corridor > 0)
+
+    mem_limit = cfg.get("memory_limit", 5e7)
+    # define pipeline
+    pipeline = cfg.get(
+        "pipeline",
+        ut_general.get_pipeline(instance_vertices, orig_shifts, mem_limit)
+    )
+
+    # execute pipeline
+    if VERBOSE:
+        print("chosen pipeline:", pipeline)
+
+    # execute iterative shortest path computation
+    for pipe_step, factor in enumerate(pipeline):
+        # rescale and set parameters accordingly
+        corridor = (corridor * original_corr > 0).astype(int)
+        current_instance, current_corridor, current_cfg = ut_general.rescale(
+            original_inst, corridor, cfg, factor
+        )
+        plt.figure(figsize=(20, 20))
+        plt.imshow(current_corridor)
+        plt.savefig(f"corridor{current_corridor.shape[0]}.png")
+        # run shortest path computation
+        graph = AngleGraph(current_instance, current_corridor, verbose=VERBOSE)
+        path, _, _ = graph.single_sp(**current_cfg)
+        print(graph.n_edges)
+        # compute next corridor
+        if pipe_step < len(pipeline) - 1 and len(path) > 0:
+            path = np.array(path) * factor
+            corridor = ut_general.pipeline_corridor(
+                path, instance.shape, orig_shifts, mem_limit,
+                pipeline[pipe_step + 1]
+            )
     return path
 
 
@@ -154,12 +212,7 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp, thresh=None):
             thresh = 0.3
         else:
             # set appropriate threshold automatically
-            inst_size = min(
-                [
-                    graph.hard_constraints.shape[0],
-                    graph.hard_constraints.shape[1]
-                ]
-            )
+            inst_size = min([graph.instance.shape[0], graph.instance.shape[1]])
             thresh = int(inst_size / 20)
         if VERBOSE:
             print("set diversity treshold automatically to", thresh)

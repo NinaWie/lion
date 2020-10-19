@@ -315,7 +315,6 @@ def pipeline_corridor(
     estimated_edges_10 = (np.sum(corridor > 0) * n_shifts) / (next_factor**4)
     # take 20 times the factor dilations (but set to at least 10)
     now_dist = max([(20 * mem_limit) / estimated_edges_10, 10])
-    print("chosen corridor width:", int(now_dist))
     corridor = ut_ksp.fast_dilation(path_line, out_shape, iters=int(now_dist))
     return corridor
 
