@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 def angle_graph_display_dists(self, edge_array, func=np.min, name="dists"):
     if not _PLOT_ENABLED:
         logger.warning('No plotting library available')
+        return
 
     arr = np.zeros(self.pos2node.shape)
     for i in range(len(self.pos2node)):
