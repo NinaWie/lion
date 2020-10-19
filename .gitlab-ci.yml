@@ -1,0 +1,17 @@
+image: python:3.8
+
+stages:
+  - deploy
+
+variables:
+  PATHFINDER_GITLAB_PROJECT_ID: 9814279
+
+run:
+  stage: deploy
+  script:
+    - pip install twine
+    - python setup.py sdist bdist_wheel
+    - TWINE_PASSWORD=${PATHFINDER_LION_PYTHON_TOKEN} TWINE_USERNAME=__token__ python -m twine upload --repository-url https://gitlab.com/api/v4/projects/${PATHFINDER_GITLAB_PROJECT_ID}/packages/pypi dist/*
+  only:
+    refs:
+      - master

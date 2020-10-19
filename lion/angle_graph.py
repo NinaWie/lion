@@ -10,7 +10,6 @@ import numpy as np
 import time
 import pickle
 from numba.typed import List
-import matplotlib.pyplot as plt
 
 
 class AngleGraph():
@@ -300,7 +299,8 @@ class AngleGraph():
         self.time_logs["shortest_path_tree"] = round(time.time() - tic, 3)
         if self.verbose:
             print("time shortest_path_tree:", round(time.time() - tic, 3))
-        # self._display_dists(self.dists_ba)
+        # from lion.utils.plotting import angle_graph_display_dists
+        # self.angle_graph_display_dists(self.dists_ba)
         # distance in ba: take IN edges to source, by computing in neighbors
         # take their first dim value (out edge to source) + source val
         (s0, s1) = self.start_inds
@@ -385,17 +385,6 @@ class AngleGraph():
         # )  # scalar: weighted sum of the summed class costs
         return np.asarray(path
                           ).tolist(), path_costs.tolist(), cost_sum.tolist()
-
-    def _display_dists(self, edge_array, func=np.min, name="dists"):
-        arr = np.zeros(self.pos2node.shape)
-        for i in range(len(self.pos2node)):
-            for j in range(len(self.pos2node[0])):
-                ind = self.pos2node[i, j]
-                if ind >= 0:
-                    arr[i, j] = func(edge_array[ind, :])
-        plt.imshow(arr)
-        plt.colorbar()
-        plt.savefig(name + ".png")
 
     def get_shortest_path(self, start_inds, dest_inds, ret_only_path=False):
         dest_ind_stack = self.pos2node[tuple(dest_inds)]
