@@ -41,6 +41,11 @@ def load_from_dat(dat_path):
     config_new = dict()
     config_new["start_inds"] = start_inds
     config_new["dest_inds"] = dest_inds
+    config_new["pylon_dist_min"] = cfg.pylon_dist_min
+    config_new["pylon_dist_max"] = cfg.pylon_dist_max
+    config_new["forbidden_val"] = np.inf
+    config_new["angle_weight"] = 0.85
+    config_new["cable_allowed"] = 0
     return instance_lion, config_new
 
 
@@ -57,7 +62,7 @@ ep = np.asarray([585, 2601])
 # downsample for fast testing
 factor = 1
 if factor > 1:
-    test_instance = general.rescale(test_instance, factor)
+    test_instance = general.rescale_instance(test_instance, factor)
     sp = (sp / factor).astype(int)
     ep = (ep / factor).astype(int)
 cfg = {}
@@ -65,18 +70,21 @@ cfg["start_inds"] = sp
 cfg["dest_inds"] = ep
 cfg["forbidden_val"] = np.inf
 cfg["angle_weight"] = 0.85
+cfg["pylon_dist_min"] = 15
+cfg["pylon_dist_max"] = 25
 
 # CODE TO USE MY DAT FILES
-# inst_name = "de_data_1_1.dat"
-# test_instance, cfg = load_from_dat("../thesis/power_planner.nosync/data/" +
-#                               inst_name)
+inst_name = "de_data_1_1.dat"
+test_instance, cfg = load_from_dat(
+    "../thesis/power_planner.nosync/data/" + inst_name
+)
 
 print(test_instance.shape, cfg)
 
-# path = optimal_route(test_instance, cfg.copy())
-# paths = [path]
 tic = time.time()
-paths = ksp_routes(test_instance, cfg.copy(), 5)
+path = optimal_pylon_spotting(test_instance, cfg.copy())
+paths = [path]
+# paths = ksp_pylons(test_instance, cfg.copy(), 5)
 print("time for processing (debug.py)", time.time() - tic)
 
 # plotting

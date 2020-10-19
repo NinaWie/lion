@@ -24,22 +24,23 @@ class AngleGraph():
         verbose=1,
         n_iters=50
     ):
-        self.cost_instance = instance
-        self.hard_constraints = instance_corr
+        # initialiye edge instance
+        self.instance = instance.copy()
+        assert np.all(
+            self.instance < np.inf
+        ), "No infs allowed in instance input to AngleGraph"
+        # construct instance with infs where hard constraints are:
+        self.instance[np.where(instance_corr == 0)] = np.inf
+
         if edge_instance is None:
-            self.edge_cost_instance = instance.copy()
+            self.edge_inst = instance
         else:
-            self.edge_cost_instance = edge_instance
+            self.edge_inst = edge_instance
         self.x_len, self.y_len = instance_corr.shape
         self.n_iters = n_iters
         self.time_logs = {}
         self.verbose = verbose
         self.directed = directed
-
-        # construct cost rest
-        inf_corr = np.absolute(1 - self.hard_constraints).astype(float)
-        inf_corr[inf_corr > 0] = np.inf
-        self.cost_rest = self.cost_instance + inf_corr
 
     def set_shift(
         self,
@@ -130,45 +131,6 @@ class AngleGraph():
         if self.verbose:
             print("memory taken (dists shape):", self.n_edges)
 
-    def set_corridor(
-        self, corridor, start_inds, dest_inds, sample_func="mean",
-        sample_method="simple", factor_or_n_edges=1
-    ):  # yapf: disable
-        """
-        Function to downsample instance in restricted corridor for the
-        iterative pipeline approach
-        """
-        # assert factor_or_n_edges == 1, "pipeline not implemented yet"
-        corridor = (corridor > 0).astype(int) * (self.hard_constraints >
-                                                 0).astype(int)
-        inf_corr = np.absolute(1 - corridor).astype(float)
-        inf_corr[inf_corr > 0] = np.inf
-
-        self.factor = factor_or_n_edges
-        self.cost_rest = self.cost_instance + inf_corr
-        # downsample
-        tic = time.time()
-        if self.factor > 1:
-            self.cost_rest = ut_cost.inf_downsample(
-                self.cost_rest, self.factor
-            )
-
-        self.time_logs["downsample"] = round(time.time() - tic, 3)
-
-        # repeat because edge artifacts
-        self.cost_rest = self.cost_rest + inf_corr
-
-        # add start and end TODO ugly
-        self.cost_rest[:, dest_inds[0],
-                       dest_inds[1]] = self.cost_instance[:, dest_inds[0],
-                                                          dest_inds[1]]
-        self.cost_rest[:, start_inds[0], start_inds[1]] = (
-            self.cost_instance[:, start_inds[0], start_inds[1]]
-        )
-
-        self.start_inds = start_inds
-        self.dest_inds = dest_inds
-
     def set_edge_costs(
         self,
         layer_classes=["resistance"],
@@ -176,6 +138,7 @@ class AngleGraph():
         angle_weight=0,
         max_angle_lg=np.pi,
         angle_cost_function='linear',
+        cable_allowed=True,
         **kwargs
     ):
         """
@@ -200,11 +163,6 @@ class AngleGraph():
         ), f"classes ({len(layer_classes)}) and\
             weights({len(class_weights)}) must be of same length!"
 
-        assert len(layer_classes) == len(
-            self.cost_rest
-        ), f"classes ({len(layer_classes)}) and\
-            instance layers ({len(self.cost_rest)}) must be of same length!"
-
         assert 0 <= angle_weight <= 1, "angle weight must be between 0 and 1"
         # set classes
         self.cost_classes = ["angle"] + list(layer_classes)
@@ -224,27 +182,11 @@ class AngleGraph():
             max_angle_lg, angle_cost_function
         )
 
-        # define instance by weighted sum
-        self.instance = np.sum(
-            np.moveaxis(self.cost_rest, 0, -1) * self.cost_weights[1:], axis=2
-        )
-        # if one weight is zero, have to correct 0*inf errors
-        if np.any(np.isnan(self.instance)):
-            self.instance[np.isnan(self.instance)] = np.inf
+        # If it is not allowed to traverse forbidden areas with a cable,
+        # transform edge instance accordingly
+        if not cable_allowed:
+            self.edge_inst[self.instance == np.inf] = np.inf
 
-        self.edge_inst = np.sum(
-            np.moveaxis(self.edge_cost_instance, 0, -1) *
-            self.cost_weights[1:],
-            axis=2
-        )
-        # dirty_extend = self.edge_inst.copy()
-        # x_len, y_len = self.edge_inst.shape
-        # for i in range(1, x_len - 1):
-        #     for j in range(1, y_len - 1):
-        #         if np.any(self.edge_inst[i - 1:i + 2, j - 1:j + 2]
-        # == np.inf):
-        #             dirty_extend[i, j] = np.inf
-        # self.edge_inst = dirty_extend
         self.time_logs["add_all_edges"] = round(time.time() - tic, 3)
         if self.verbose:
             print("instance shape", self.instance.shape)
@@ -293,7 +235,7 @@ class AngleGraph():
     # --------------------------------------------------------------------
     # SHORTEST PATH COMPUTATION
 
-    def add_edges(self, mode="DAG", iters=100, edge_weight=0, **kwargs):
+    def add_edges(self, mode="DAG", iters=100, edge_weight=0.2, **kwargs):
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
         if np.any(shift_norms == 1):
@@ -422,9 +364,7 @@ class AngleGraph():
     # Functions to output path (backtrack) and corresponding costs
 
     def transform_path(self, path):
-        path_costs = np.array(
-            [self.cost_instance[:, p[0], p[1]] for p in path]
-        )
+        path_costs = np.array([[self.instance[p[0], p[1]]] for p in path])
         # include angle costs
         ang_costs = ut_cost.compute_angle_costs(
             path, self.angle_norm_factor, mode=self.angle_cost_function
@@ -530,15 +470,21 @@ class AngleGraph():
                 or float(self.dest_inds[i]).is_integer() for i in range(2)
             ]
         ), "dest inds must be integer!"
+        assert self.instance[tuple(
+            self.start_inds
+        )] < np.inf, "Problem: Start coordinates are not in project region"
+        assert self.instance[
+            tuple(self.dest_inds)
+        ] < np.inf, "Problem: Destination coordinates are not in project region"
         self.start_inds = np.asarray(self.start_inds).astype(int)
         self.dest_inds = np.asarray(self.dest_inds).astype(int)
 
-        instance_shape = np.asarray(self.hard_constraints.shape)
+        instance_shape = np.asarray(self.instance.shape)
         assert np.all(np.asarray(self.start_inds) < instance_shape) and np.all(
             np.asarray(self.dest_inds) < instance_shape
         ), "start or dest not in project region!"
 
-    def single_sp(self, power=1, **kwargs):
+    def single_sp(self, **kwargs):
         """
         Function for full processing to yield shortest path
         Necessary parameters:
@@ -563,7 +509,6 @@ class AngleGraph():
         if self.verbose:
             print("1) Initialize shifts and instance (corridor)")
         self.set_edge_costs(**kwargs)
-        self.instance = self.instance**power
         # add vertices
         self.add_nodes()
         if self.verbose:

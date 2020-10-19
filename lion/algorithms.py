@@ -38,7 +38,6 @@ import numpy as np
 from lion.angle_graph import AngleGraph
 from lion.ksp import KSP
 import lion.utils.general as ut_general
-import matplotlib.pyplot as plt
 import time
 
 VERBOSE = 0
@@ -164,13 +163,10 @@ def optimal_pylon_spotting(instance, cfg, corridor=None):
         current_instance, current_corridor, current_cfg = ut_general.rescale(
             original_inst, corridor, cfg, factor
         )
-        plt.figure(figsize=(20, 20))
-        plt.imshow(current_corridor)
-        plt.savefig(f"corridor{current_corridor.shape[0]}.png")
         # run shortest path computation
         graph = AngleGraph(current_instance, current_corridor, verbose=VERBOSE)
         path, _, _ = graph.single_sp(**current_cfg)
-        print(graph.n_edges)
+
         # compute next corridor
         if pipe_step < len(pipeline) - 1 and len(path) > 0:
             path = np.array(path) * factor
