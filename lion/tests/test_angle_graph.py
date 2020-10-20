@@ -43,7 +43,7 @@ class TestImplicitLG(unittest.TestCase):
     def test_correct_shortest_path(self) -> None:
         """ Test the implicit line graph construction """
         graph = AngleGraph(
-            self.example_inst, self.working_expl_corr, n_iters=10, verbose=0
+            self.example_inst, self.working_expl_corr, verbose=0
         )
         path, path_costs, cost_sum = graph.single_sp(**vars(self.cfg))
         self.assertListEqual(graph.cost_weights.tolist(), [0.25, 0.75])
@@ -66,14 +66,12 @@ class TestImplicitLG(unittest.TestCase):
         self.assertNotEqual(len(path), 0)
         self.assertEqual(len(path), len(path_costs))
         self.assertGreaterEqual(cost_sum, 5)
-        weighted_costs = np.sum(path_costs, axis=0) * graph.cost_weights
-        self.assertEqual(np.sum(weighted_costs), cost_sum)
         for (i, j) in path:
             self.assertEqual(self.example_inst[i, j], 1)
 
     def test_edge_costs(self) -> None:
         graph = AngleGraph(
-            self.example_inst, self.working_expl_corr, n_iters=10, verbose=0
+            self.example_inst, self.working_expl_corr, verbose=0
         )
         self.cfg.angle_weight = 0
         self.cfg.edge_weight = 0.5
@@ -101,14 +99,13 @@ class TestImplicitLG(unittest.TestCase):
                 )
             )
         dest_costs_gt = np.sum(a)
+        self.assertTrue(np.isclose(cost_sum, dest_costs_gt))
         self.assertTrue(np.isclose(dest_costs, dest_costs_gt))
         self.cfg.angle_weight = 0.25
         self.cfg.edge_weight = 0
 
     def test_angle_sp(self) -> None:
-        graph = AngleGraph(
-            self.example_inst, self.high_angle_corr, n_iters=10, verbose=0
-        )
+        graph = AngleGraph(self.example_inst, self.high_angle_corr, verbose=0)
         _ = graph.single_sp(**vars(self.cfg))
         # assert that destination can NOT be reached
         dest_ind = graph.pos2node[tuple(self.dest_inds)]
@@ -116,9 +113,7 @@ class TestImplicitLG(unittest.TestCase):
 
         # NEXT TRY: more angles allowed
         self.cfg.max_angle_lg = np.pi
-        graph = AngleGraph(
-            self.example_inst, self.high_angle_corr, n_iters=10, verbose=0
-        )
+        graph = AngleGraph(self.example_inst, self.high_angle_corr, verbose=0)
         path, path_costs, cost_sum = graph.single_sp(**vars(self.cfg))
         # assert that dest CAN be reached
         dest_ind = graph.pos2node[tuple(self.dest_inds)]

@@ -3,7 +3,8 @@ import lion.utils.costs as ut_cost
 import lion.utils.ksp as ut_ksp
 
 from lion.fast_shortest_path import (
-    sp_dag, sp_dag_reversed, topological_sort_jit, edge_costs, sp_bf
+    sp_dag, sp_dag_reversed, topological_sort_jit, edge_costs,
+    efficient_update_sp
 )
 import warnings
 import numpy as np
@@ -20,8 +21,7 @@ class AngleGraph():
         instance_corr,
         edge_instance=None,
         directed=True,
-        verbose=1,
-        n_iters=50
+        verbose=1
     ):
         # initialiye edge instance
         self.instance = instance.copy()
@@ -36,7 +36,6 @@ class AngleGraph():
         else:
             self.edge_inst = edge_instance
         self.x_len, self.y_len = instance_corr.shape
-        self.n_iters = n_iters
         self.time_logs = {}
         self.verbose = verbose
         self.directed = directed
@@ -68,6 +67,9 @@ class AngleGraph():
         # sort the shifts
         self.shifts = np.asarray(shifts)[np.argsort(shift_angles)]
         self.shift_tuples = self.shifts
+
+        # determine whether the graph is directed acyclic
+        self.is_dag = max_angle <= np.pi / 2
 
         # construct bresenham lines
         shift_lines = List()
@@ -234,7 +236,7 @@ class AngleGraph():
     # --------------------------------------------------------------------
     # SHORTEST PATH COMPUTATION
 
-    def add_edges(self, mode="DAG", iters=100, edge_weight=0.2, **kwargs):
+    def add_edges(self, edge_weight=0.2, **kwargs):
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
         if np.any(shift_norms == 1):
@@ -254,20 +256,20 @@ class AngleGraph():
             print("Computed edge instance", time.time() - tic)
         tic = time.time()
         # RUN - either directed acyclic or BF algorithm
-        if mode == "BF":
-            # TODO: nr iterations argument
-            self.dists, self.preds = sp_bf(
-                iters, self.stack_array, np.array(self.shifts),
-                self.angle_cost_array, self.dists, self.preds, self.instance,
-                self.edge_cost
-            )
-        elif mode == "DAG":
-            self.dists, self.preds = sp_dag(
+        if self.is_dag:
+            if self.angle_cost_function == "linear" and len(self.shifts) > 100:
+                algorithm = efficient_update_sp
+            else:
+                algorithm = sp_dag
+            self.dists, self.preds = algorithm(
                 self.stack_array, self.pos2node, np.array(self.shifts),
                 self.angle_cost_array, self.dists, self.preds, self.edge_cost
             )
         else:
-            raise ValueError("wrong mode input: " + mode)
+            raise NotImplementedError(
+                "Angle shortest path not implemented for cyclic graph.\
+                    Please set max_angle <= np.pi / 2 in config"
+            )
 
         self.time_logs["shortest_path"] = round(time.time() - tic, 3)
         if self.verbose:
@@ -364,27 +366,24 @@ class AngleGraph():
     # Functions to output path (backtrack) and corresponding costs
 
     def transform_path(self, path):
-        path_costs = np.array([[self.instance[p[0], p[1]]] for p in path])
-        # include angle costs
+        raw_resistances = np.array([[self.instance[p[0], p[1]]] for p in path])
+
+        # compute angle costs
         ang_costs = ut_cost.compute_angle_costs(
             path, self.angle_norm_factor, mode=self.angle_cost_function
         )
-        # prevent that inf * 0 if zero edge weight
-        edge_costs = 0
+        # compute the cable costs (bresenham line between pylons)
+        edge_costs = np.zeros(len(path))
         if self.edge_weight != 0:
             edge_costs = ut_cost.compute_edge_costs(path, self.edge_inst)
-        # print("unweighted edge costs", np.sum(edge_costs))
-        path_costs = np.concatenate(
-            (np.swapaxes(np.array([ang_costs]), 1, 0), path_costs), axis=1
+
+        # compute the geometric path costs
+        path_costs = ut_cost.compute_geometric_costs(
+            path, self.instance, edge_costs * self.edge_weight
         )
-        cost_sum = np.dot(
-            self.cost_weights, np.sum(np.array(path_costs), axis=0)
-        ) + np.sum(edge_costs) * self.edge_weight
-        # cost_sum = np.dot(
-        #     self.class_weights, np.sum(np.array(path_costs), axis=0)
-        # )  # scalar: weighted sum of the summed class costs
-        return np.asarray(path
-                          ).tolist(), path_costs.tolist(), cost_sum.tolist()
+        # combine costs
+        cost_sum = np.sum(path_costs) + self.angle_weight * np.sum(ang_costs)
+        return np.asarray(path).tolist(), np.array(path_costs), cost_sum
 
     def get_shortest_path(self, start_inds, dest_inds, ret_only_path=False):
         dest_ind_stack = self.pos2node[tuple(dest_inds)]

@@ -9,32 +9,9 @@ except ModuleNotFoundError:
     pass
 
 __all__ = [
-    "inf_downsample", "downsample", "compute_angle_costs",
-    "compute_edge_costs", "compute_raw_angles"
+    "compute_angle_costs", "compute_edge_costs", "compute_raw_angles",
+    "compute_geometric_costs"
 ]
-
-
-def inf_downsample(img, factor, func="mean"):
-    """
-    TODO: merge with downsample method above
-    Downsampling function to reduce the size of an inst by a certain factor,
-    but replace only non inf values
-    """
-    x_len_new = img.shape[1] // factor
-    y_len_new = img.shape[2] // factor
-    new_img = np.zeros(img.shape)
-    new_img += np.inf
-    pool_func = eval("np." + func)
-    for i in range(x_len_new):
-        for j in range(y_len_new):
-            patch = img[:, i * factor:(i + 1) * factor,
-                        j * factor:(j + 1) * factor]
-            if np.any(patch < np.inf):
-                for k in range(len(new_img)):
-                    part = patch[k]
-                    new_img[k, i * factor,
-                            j * factor] = pool_func(part[part < np.inf])
-    return new_img
 
 
 def compute_edge_costs(path, instance):
@@ -47,17 +24,45 @@ def compute_edge_costs(path, instance):
         A list with the same length as the path, containing the edge cost vals
         (last value is zero because less edges then vertices)
     """
+    path = np.array(path)
     e_costs = []
     for p in range(len(path) - 1):
-        point_list = bresenham_line(
-            path[p][0], path[p][1], path[p + 1][0], path[p + 1][1]
-        )
+        point_list = bresenham_line(*tuple(path[p]), *tuple(path[p + 1]))
         e_costs.append(
             np.mean([instance[i, j] for (i, j) in point_list[1:-1]])
         )
     # to make it the same size as other costs
     e_costs.append(0)
-    return e_costs
+    return np.array(e_costs)
+
+
+def compute_geometric_costs(path, instance, edge_costs):
+    """
+    Compute geometric costs along the path
+    Arguments:
+        path: List or array of path corrdinates
+        instance: 2D array of resistances
+        edge_costs: 1D array, previously computed cable costs along the path
+    Returns:
+        List of geometric edge costs along the path
+    """
+    path = np.array(path)
+    geometric_costs = []
+    for p in range(len(path) - 1):
+        # cable costs
+        bresenham_edge_dist = edge_costs[p]
+        # compute distance inbetween
+        shift_costs = np.linalg.norm(path[p] - path[p + 1])
+        # compute geometric edge costs
+        geometric_costs.append(
+            shift_costs * (
+                0.5 *
+                (instance[tuple(path[p])] + instance[tuple(path[p + 1])]) +
+                bresenham_edge_dist
+            )
+        )
+    geometric_costs.append(0)
+    return geometric_costs
 
 
 def compute_angle_costs(path, angle_norm_factor=np.pi / 2, mode="linear"):
