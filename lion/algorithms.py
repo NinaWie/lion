@@ -28,8 +28,10 @@ import numpy as np
 from lion.angle_graph import AngleGraph
 from lion.ksp import KSP
 import time
+import logging
+import sys
 
-VERBOSE = 0
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "optimal_route", "optimal_pylon_spotting", "ksp_routes", "ksp_pylons"
@@ -49,8 +51,7 @@ def _initialize_graph(instance, cfg):
         cfg: updated configuration file
     """
     forbidden_val = cfg.get("forbidden_val", np.nan)
-    if VERBOSE:
-        print("forbidden val", forbidden_val)
+    logger.info(f"forbidden val: {forbidden_val}")
 
     # make forbidden region array
     project_region = np.ones(instance.shape)
@@ -67,7 +68,7 @@ def _initialize_graph(instance, cfg):
     instance = np.array([instance])
 
     # init graph
-    graph = AngleGraph(instance, project_region, verbose=VERBOSE)
+    graph = AngleGraph(instance, project_region)
 
     return graph, cfg
 
@@ -94,11 +95,8 @@ def optimal_route(instance, cfg):
     tic_raster = time.time()
     path, _, _ = graph.single_sp(**cfg)
 
-    if VERBOSE:
-        print(
-            "Overall timefor optimal route",
-            time.time() - tic_raster, graph.time_logs
-        )
+    logger.info(f"Overall timefor optimal route: {time.time() - tic_raster}")
+    logger.info(f"time logs: {graph.time_logs}")
 
     return path
 
@@ -161,8 +159,7 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp, thresh=None):
                 ]
             )
             thresh = int(inst_size / 20)
-        if VERBOSE:
-            print("set diversity treshold automatically to", thresh)
+        logger.info(f"set diversity treshold automatically to: {thresh}")
 
     # construct sp trees
     tic = time.time()
@@ -172,8 +169,7 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp, thresh=None):
     ksp_out = algorithm(ksp_processor, k, thresh=thresh)
     # extract path itself
     ksp_paths = [k[0] for k in ksp_out]
-    if VERBOSE:
-        print("Overall timefor run ksp", time.time() - tic)
+    logger.info(f"Time for run ksp: {time.time() - tic}")
     return ksp_paths
 
 

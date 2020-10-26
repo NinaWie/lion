@@ -91,8 +91,9 @@ class KSP:
             best_paths.append(vertices_path)
 
         self.graph.time_logs["ksp"] = round(time.time() - tic, 3)
-        if self.graph.verbose:
-            print("compute KSP time:", self.graph.time_logs["ksp"])
+        self.graph.logger.debug(
+            f"compute KSP time: {self.graph.time_logs['ksp']}"
+        )
         return [self.graph.transform_path(p) for p in best_paths]
 
     def min_set_intersection(self, k, thresh=0.5):
@@ -150,6 +151,5 @@ class KSP:
                 if len(best_paths) >= k:
                     break
         self.graph.time_logs["ksp"] = round(time.time() - tic, 3)
-        if self.graph.verbose:
-            print("FIND KSP time:", self.graph.time_logs["ksp"])
+        self.graph.logger(f"FIND KSP time: {self.graph.time_logs['ksp']}")
         return [self.graph.transform_path(path) for path in best_paths]

@@ -10,7 +10,7 @@ from lion.fast_shortest_path import (
     edge_costs,
     sp_bf  # , efficient_update_sp
 )
-import warnings
+import logging
 import numpy as np
 import time
 import pickle
@@ -25,9 +25,10 @@ class AngleGraph():
         instance_corr,
         edge_instance=None,
         directed=True,
-        verbose=1,
         n_iters=50
     ):
+        self.logger = logging.getLogger(__name__)
+
         self.cost_instance = instance
         self.hard_constraints = instance_corr
         if edge_instance is None:
@@ -37,7 +38,6 @@ class AngleGraph():
         self.x_len, self.y_len = instance_corr.shape
         self.n_iters = n_iters
         self.time_logs = {}
-        self.verbose = verbose
         self.directed = directed
 
         # construct cost rest
@@ -120,12 +120,12 @@ class AngleGraph():
             np.all(self.stack_array == self.start_inds, axis=1)
         )[0][0]
         self.stack_array = (self.stack_array[start_point:]).astype(int)
-        if self.verbose:
-            print("time stack construction sort:", round(time.time() - tic, 3))
-            print(
-                "stack", len(self.stack_array), self.stack_array[0],
-                self.stack_array[-1]
-            )
+        self.logger.info(
+            f"constructed stack in : {round(time.time() - tic, 3)}"
+        )
+        self.logger.debug(
+            f"number of vertices in stack: {len(self.stack_array)}"
+        )
 
         # build pos2node
         self.pos2node = (
@@ -145,8 +145,7 @@ class AngleGraph():
         self.n_pixels = self.x_len * self.y_len
         self.n_nodes = len(self.stack_array)
         self.n_edges = len(self.shifts) * len(self.dists)
-        if self.verbose:
-            print("memory taken (dists shape):", self.n_edges)
+        self.logger.info(f"Graph size (number of edges): {self.n_edges}")
 
     def set_corridor(
         self, corridor, start_inds, dest_inds, sample_func="mean",
@@ -210,8 +209,7 @@ class AngleGraph():
         self.cost_weights = np.array([ang_weight_norm] + list(class_weights))
         # print("class weights", class_weights)
         self.cost_weights = self.cost_weights / np.sum(self.cost_weights)
-        if self.verbose:
-            print("cost weights", self.cost_weights)
+        self.logger.debug(f"weights: {self.cost_weights}")
 
         # set angle weight and already multiply with angles
         self.angle_weight = self.cost_weights[0]
@@ -240,8 +238,6 @@ class AngleGraph():
         #             dirty_extend[i, j] = np.inf
         # self.edge_inst = dirty_extend
         self.time_logs["add_all_edges"] = round(time.time() - tic, 3)
-        if self.verbose:
-            print("instance shape", self.instance.shape)
 
     # --------------------------------------------------------------------
     # SHORTEST PATH COMPUTATION
@@ -250,7 +246,7 @@ class AngleGraph():
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
         if np.any(shift_norms == 1):
-            # warnings.warn("Raster approach, EDGE WEIGHT IS SET TO ZERO")
+            self.logger.warn("raster approach - edge weight set to zero")
             self.edge_weight = 0
 
         shift_norms = [np.linalg.norm(s) for s in self.shifts]
@@ -262,8 +258,7 @@ class AngleGraph():
             self.edge_cost, self.instance, self.edge_inst, self.shift_lines,
             self.shift_costs, self.edge_weight
         )
-        if self.verbose:
-            print("Computed edge instance", time.time() - tic)
+        self.logger.debug(f"Computed edge costs in {time.time() - tic}")
         tic = time.time()
         # RUN - either directed acyclic or BF algorithm
         if mode == "BF":
@@ -282,8 +277,7 @@ class AngleGraph():
             raise ValueError("wrong mode input: " + mode)
 
         self.time_logs["shortest_path"] = round(time.time() - tic, 3)
-        if self.verbose:
-            print("time edges:", round(time.time() - tic, 3))
+        self.logger.debug(f"time single SP: {round(time.time() - tic, 3)}")
 
     # ----------------------------------------------------------------------
     # SHORTEST PATH TREE
@@ -309,8 +303,9 @@ class AngleGraph():
             self.edge_cost
         )
         self.time_logs["shortest_path_tree"] = round(time.time() - tic, 3)
-        if self.verbose:
-            print("time shortest_path_tree:", round(time.time() - tic, 3))
+        self.logger.debug(
+            f"done shortest_path_tree:{round(time.time() - tic, 3)}"
+        )
         # from lion.utils.plotting import angle_graph_display_dists
         # self.angle_graph_display_dists(self.dists_ba)
         # distance in ba: take IN edges to source, by computing in neighbors
@@ -401,7 +396,7 @@ class AngleGraph():
     def get_shortest_path(self, start_inds, dest_inds, ret_only_path=False):
         dest_ind_stack = self.pos2node[tuple(dest_inds)]
         if not np.any(self.dists[dest_ind_stack, :] < np.inf):
-            warnings.warn("empty path")
+            self.logger.warn("WARNING: Empty path!")
             return [], [], 0
         tic = time.time()
         curr_point = dest_inds
@@ -499,26 +494,24 @@ class AngleGraph():
 
         # initialize donut ring and edge costs
         self.set_shift(self.start_inds, self.dest_inds, **kwargs)
-        if self.verbose:
-            print("1) Initialize shifts and instance (corridor)")
+        self.logger.debug("1) Initialize shifts and instance (corridor)")
         self.set_edge_costs(**kwargs)
         self.instance = self.instance**power
         # add vertices
         self.add_nodes()
-        if self.verbose:
-            print("2) Initialize distances to inf and predecessors")
+        self.logger.debug("2) Initialize distances to inf and predecessors")
         # MAIN ALGORITHM
         self.add_edges(**kwargs)
-        if self.verbose:
-            print("3) Compute source shortest path tree")
-            print("number of vertices and edges:", self.n_nodes, self.n_edges)
+        self.logger.debug("3) Compute source shortest path tree")
+        self.logger.debug(
+            f"number of vertices: {self.n_nodes} and edges: {self.n_edges}"
+        )
 
         # get actual best path
         path, path_costs, cost_sum = self.get_shortest_path(
             self.start_inds, self.dest_inds
         )
-        if self.verbose:
-            print("4) shortest path", cost_sum)
+        self.logger.debug(f"4) shortest path with cost: {cost_sum}")
         return path, path_costs, cost_sum
 
     def sp_trees(self, **kwargs):
