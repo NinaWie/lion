@@ -71,6 +71,11 @@ def rescale(instance, corridor, cfg, factor):
             raise RuntimeError(
                 "configuration must entail start and destination coordinates"
             )
+            # downscale the KSP threshold if necessary
+        if "diversity_threshold" in current_cfg.keys(
+        ) and current_cfg["diversity_threshold"] > 1:
+            current_cfg["diversity_threshold"
+                        ] = cfg["diversity_threshold"] / factor
         # downscale the pylon distances
         if "pylon_dist_min" in current_cfg.keys():
             current_cfg["pylon_dist_min"] = cfg["pylon_dist_min"] / factor
@@ -103,30 +108,25 @@ def get_donut(radius_low, radius_high):
     return pos_x - img_size, pos_y - img_size
 
 
-def angle(vec1, vec2):
+def angle(vec1, vec2, normalize=True):
     """
     Compute angle between two vectors
     :params vec1, vec2: two 1-dim vectors of same size, can be lists or array
     :returns angle
     """
-    vec1 = np.asarray(vec1)
-    vec2 = np.asarray(vec2)
-    # normalize
-    v1 = vec1 / np.linalg.norm(vec1)
-    v2 = vec2 / np.linalg.norm(vec2)
-    # special cases where arcos is nan
-    if np.allclose(v1, v2):
-        return 0
-    if np.allclose(-v1, v2):
-        return np.pi
+    # make array and normalize
+    if normalize:
+        vec1 = np.asarray(vec1)
+        vec2 = np.asarray(vec2)
+        vec1 = vec1 / np.linalg.norm(vec1)
+        vec2 = vec2 / np.linalg.norm(vec2)
     # compute angle
-    angle = np.arccos(np.dot(v1, v2))
+    angle = np.arccos(np.clip(np.dot(vec1, vec2), -1, 1))
     # want to use full 360 degrees
     if np.sin(angle) < 0:
         angle = 2 * np.pi - angle
     # can still be nan if v1 or v2 is 0
     if np.isnan(angle):
-        # print(vec1, vec2, v1, v2)
         return 0
         # raise ValueError("angle is nan, check whether vec1 or vec2 = 0")
     return angle
@@ -267,15 +267,13 @@ def get_pipeline(num_vertices, num_shifts, mem_limit):
     return np.arange(factor, 0, -1)
 
 
-def pipeline_corridor(
-    path_points, out_shape, n_shifts, mem_limit, next_factor
-):
+def pipeline_corridor(paths, out_shape, n_shifts, mem_limit, next_factor):
     """
     Get the next corridor in a pipeline (automatically calibrate the corridor
     width based on the next sampling factor)
 
     Arguments:
-        path_points: list or array of shape (n, 2) containing the points on one
+        path_points: list of arrays of shape (n, 2) containing the points on one
                 or more paths that have been found in the previous iteration
         out_shape: Tuple, shape of array that will be the output corridor
         n_shifts: Int, Number of neighbors per vertex (based on pylon_dist_min
@@ -283,10 +281,12 @@ def pipeline_corridor(
         mem_limit: Int, Maximum number of edges
         next_factor: Int, downsampling factor in the upcoming next iteration
     """
+    # extend with bresenham line because otherwise gaps between the points
     path_line = []
-    for i in range(len(path_points) - 1):
-        line = bresenham_line(*path_points[i], *path_points[i + 1])
-        path_line.extend(line)
+    for path_points in paths:
+        for i in range(len(path_points) - 1):
+            line = bresenham_line(*path_points[i], *path_points[i + 1])
+            path_line.extend(line)
     path_line = np.asarray(path_line)
     # check how many pixels you get with 20 dilations
     corridor = ut_ksp.fast_dilation(path_line, out_shape, iters=20)

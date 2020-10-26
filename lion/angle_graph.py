@@ -203,9 +203,15 @@ class AngleGraph():
         self.angle_cost_function = angle_cost_function
         tic = time.time()
 
+        # normalize (otherwise need to normalize in quadratic loop)
+        shift_arrs = [np.asarray(s) for s in self.shifts]
+        norm_shifts = [s / np.linalg.norm(s) for s in shift_arrs]
         # compute raw angle values
         angles_raw = np.array(
-            [[ut.angle(s2, s1) for s1 in self.shifts] for s2 in self.shifts]
+            [
+                [ut.angle(s2, s1, normalize=False) for s1 in norm_shifts]
+                for s2 in norm_shifts
+            ]
         )
         # compute feasible maximum value
         max_angle = np.max(angles_raw[angles_raw <= max_angle_lg])
@@ -461,9 +467,9 @@ class AngleGraph():
         assert self.instance[tuple(
             self.start_inds
         )] < np.inf, "Problem: Start coordinates are not in project region"
-        assert self.instance[
-            tuple(self.dest_inds)
-        ] < np.inf, "Problem: Destination coordinates are not in project region"
+        assert self.instance[tuple(
+            self.dest_inds
+        )] < np.inf, "Problem: Target coordinates are not in project region"
         self.start_inds = np.asarray(self.start_inds).astype(int)
         self.dest_inds = np.asarray(self.dest_inds).astype(int)
 

@@ -32,6 +32,17 @@ cfg - configuration: Dict with the following neceassay and optional parameters
     - cable_allowed: If True, then forbidden areas can still be traversed with
             a cable (only placing a pylon is forbidden)
             If False, then forbidden areas can not be traversed either
+    - diversity_threshold:
+        FOR KSP.ksp:
+            Minimum diversity of next path from previous paths in cell
+            distance. E.g. if thresh = 200, each path will be at least 200
+            cells away at one point from each other path.
+            If None, it is set by default to 1/20 of the instance size
+
+        FOR KSP.min_set_intersection:
+            maximum intersection of the new path with all previous points
+            Must be between 0 and 1. E.g. if 0.2, then at most 20% of cells
+            are shared between one path and the other paths
 """
 
 import numpy as np
@@ -118,7 +129,9 @@ def optimal_route(instance, cfg):
     return path
 
 
-def optimal_pylon_spotting(instance, cfg, corridor=None):
+def optimal_pylon_spotting(
+    instance, cfg, corridor=None, k=1, algorithm=KSP.ksp
+):
     """
     Compute the (angle-) optimal pylon spotting
     @params:
@@ -165,20 +178,27 @@ def optimal_pylon_spotting(instance, cfg, corridor=None):
         )
         # run shortest path computation
         graph = AngleGraph(current_instance, current_corridor, verbose=VERBOSE)
-        path, _, _ = graph.single_sp(**current_cfg)
+        if k > 1:
+            paths = _run_ksp(graph, current_cfg, k, algorithm=algorithm)
+            paths = [np.array(path) * factor for path in paths]
+        else:
+            path, _, _ = graph.single_sp(**current_cfg)
+            paths = [np.asarray(path) * factor]
 
         # compute next corridor
-        if pipe_step < len(pipeline) - 1 and len(path) > 0:
-            path = np.array(path) * factor
+        if pipe_step < len(pipeline) - 1:
             corridor = ut_general.pipeline_corridor(
-                path, instance.shape, orig_shifts, mem_limit,
+                paths, instance.shape, orig_shifts, mem_limit,
                 pipeline[pipe_step + 1]
             )
-    return path
+    if k == 1:
+        return path
+    else:
+        return paths
 
 
 # ----------------------------------- KSP  ---------------------------------
-def _run_ksp(graph, cfg, k, algorithm=KSP.ksp, thresh=None):
+def _run_ksp(graph, cfg, k, algorithm=KSP.ksp):
     """
     Build the shortest path trees and compute k diverse shortest paths
     Arguments:
@@ -192,26 +212,20 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp, thresh=None):
                          least <thresh> cells from the previously found paths
                 KSP.min_set_intersection: Iteratively find next shortest path
                          that shares at most <thresh> cells with the previous
-        thresh: FOR KSP.ksp:
-                Minimum diversity of next path from previous paths in cell
-                distance. E.g. if thresh = 200, each path will be at least 200
-                cells away at one point from each other path.
-                If None, it is set by default to 1/20 of the instance size
-
-                FOR KSP.min_set_intersection:
-                maximum intersection of the new path with all previous points
-                Must be between 0 and 1. E.g. if 0.2, then at most 20% of cells
-                are shared between one path and the other paths
     """
-    if thresh is None:
+
+    def set_thresh_automatically():
+        # helper method to set the diversity threshold dependent on inst size
         if algorithm == KSP.min_set_intersection:
             thresh = 0.3
         else:
-            # set appropriate threshold automatically
             inst_size = min([graph.instance.shape[0], graph.instance.shape[1]])
-            thresh = int(inst_size / 20)
+            thresh = int(inst_size / 10)
         if VERBOSE:
             print("set diversity treshold automatically to", thresh)
+        return thresh
+
+    thresh = cfg.get("diversity_threshold", set_thresh_automatically())
 
     # construct sp trees
     tic = time.time()
@@ -226,14 +240,13 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp, thresh=None):
     return ksp_paths
 
 
-def ksp_routes(instance, cfg, k, thresh=None, algorithm=KSP.ksp):
+def ksp_routes(instance, cfg, k, algorithm=KSP.ksp):
     """
     Compute the (angle-) optimal k diverse shortest paths through a grid
     @params:
         instance: 2D np array of resistances (see details top of file)
         cfg: config dict, must contain start and dest (see details top of file)
         k: number of paths to compute
-        thresh: see doc of run_ksp
         algorithm: see doc of run_ksp
     @returns:
         A list of paths (each path is again a list of X Y coordinates)
@@ -246,23 +259,19 @@ def ksp_routes(instance, cfg, k, thresh=None, algorithm=KSP.ksp):
     cfg["pylon_dist_max"] = 1.5
 
     # run algorithm
-    return _run_ksp(graph, cfg, k, thresh=thresh, algorithm=algorithm)
+    return _run_ksp(graph, cfg, k, algorithm=algorithm)
 
 
-def ksp_pylons(instance, cfg, k, thresh=None, algorithm=KSP.ksp):
+def ksp_pylons(instance, cfg, k, algorithm=KSP.ksp):
     """
     Compute the (angle-) optimal k diverse shortest path of PYLONS
     @params:
         instance: 2D np array of resistances (see details top of file)
         cfg: config dict, must contain start and dest (see details top of file)
         k: number of paths to compute
-        thresh: see doc of run_ksp
         algorithm: see doc of run_ksp
     @returns:
         A list of paths (each path is again a list of X Y coordinates)
     """
     # initialize graph
-    graph, cfg = _initialize_graph(instance, cfg)
-
-    # run algorithm
-    return _run_ksp(graph, cfg, k, thresh=thresh, algorithm=algorithm)
+    return optimal_pylon_spotting(instance, cfg, k=k, algorithm=algorithm)
