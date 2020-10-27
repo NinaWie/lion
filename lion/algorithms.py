@@ -27,6 +27,7 @@ cfg - configuration: Dict with the following neceassay and optional parameters
 import numpy as np
 from lion.angle_graph import AngleGraph
 from lion.ksp import KSP
+import lion.utils.costs as ut_cost
 import time
 import logging
 import sys
@@ -213,3 +214,29 @@ def ksp_pylons(instance, cfg, k, thresh=None, algorithm=KSP.ksp):
 
     # run algorithm
     return _run_ksp(graph, cfg, k, thresh=thresh, algorithm=algorithm)
+
+
+def _compute_costs(instance, path, edge_weight=0):
+    # compute angle costs
+    angles = ut_cost.compute_raw_angles(path)[:-1]
+    # compute the cable costs (bresenham line between pylons)
+    edge_costs = np.zeros(len(path))
+    if edge_weight != 0:
+        edge_costs = ut_cost.compute_edge_costs(path, instance)
+
+    # compute the geometric path costs TODO: after merge, add next 2 lines
+    # path_costs = ut_cost.compute_geometric_costs(
+    #     path, instance, edge_costs * edge_weight
+    # )
+    path = np.asarray(path)
+    geometric_costs = []
+    for p in range(len(path) - 1):
+        # compute distance inbetween
+        shift_costs = np.linalg.norm(path[p] - path[p + 1])
+        # compute geometric edge costs
+        geometric_costs.append(
+            shift_costs *
+            (0.5 * (instance[tuple(path[p])] + instance[tuple(path[p + 1])]))
+        )
+
+    return angles, geometric_costs
