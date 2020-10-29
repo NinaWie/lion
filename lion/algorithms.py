@@ -26,9 +26,12 @@ cfg - configuration: Dict with the following neceassay and optional parameters
             an iterative pipeline procedure is used
     - pipeline: pipeline in iterative approach is set automatically based on
             the memory limit. It can however be set manually as well, e.g.
-            [(4,50), (2,10)] means downsample by factor of 4, compute optimal
-            path, reduce region of interest to a corridor of width 50 around
-            optimal path, again downsample by factor of 2
+            [3,1] means downsample by factor of 3, compute optimal
+            path, reduce region of interest to a corridor around
+            optimal path (corridor width is computed automatically based on the
+            memory_limit) then downsample by factor of 1 (aka full resolution).
+            There is no support for setting the corridor width manually because
+            it does not make sense to make it smaller than it could be
     - cable_allowed: If True, then forbidden areas can still be traversed with
             a cable (only placing a pylon is forbidden)
             If False, then forbidden areas can not be traversed either
