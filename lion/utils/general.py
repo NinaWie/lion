@@ -1,11 +1,13 @@
 import numpy as np
+from numba import jit
 
+import lion.utils.ksp as ut_ksp
 from scipy.ndimage.morphology import binary_dilation
 from scipy.spatial.distance import cdist
 
 __all__ = [
-    "get_half_donut", "angle", "discrete_angle_costs", "bresenham_line",
-    "angle_360"
+    "get_half_donut", "angle", "compute_angle_cost", "bresenham_line",
+    "angle_360", "pipeline_corridor", "rescale"
 ]
 
 
@@ -17,7 +19,8 @@ def normalize(instance):
             np.min(instance)) / (np.max(instance) - np.min(instance))
 
 
-def rescale(img, scale_factor):
+@jit(nopython=True)
+def rescale_instance(img, scale_factor):
     """
     Scale down image by a factor
     Arguments:
@@ -39,24 +42,48 @@ def rescale(img, scale_factor):
     return new_img
 
 
-def upscale_corr(instance_corr, downsampled_corr, factor):
+def rescale(instance, corridor, cfg, factor):
     """
-    change instance corr according to values in downsampled
+    Prepare instance and config for the next pipeline step
+
     Arguments:
-        instance_corr: original hard constraints (2D np array)
-        downsampled_corr: new hard constraints in lower dimension
+        instance: 2D array with resistances
+        corridor: 2D array with binary (0=forbidden, 1=feasible)
+        cfg: configuration with start, dest and pylon distances
+        factor: Int > 0 : factor by which to downsample
     """
-    instance_corr_new = np.zeros(instance_corr.shape)
-    x_len, y_len = instance_corr.shape
-    new_x_len = x_len // factor
-    new_y_len = y_len // factor
-    for x in range(x_len):
-        for y in range(y_len):
-            new_x, new_y = x // factor, y // factor
-            if new_x < new_x_len and new_y < new_y_len:
-                if downsampled_corr[new_x, new_y]:
-                    instance_corr_new[x, y] = instance_corr[x, y]
-    return instance_corr_new
+    current_cfg = cfg.copy()
+    if factor > 1:
+        # rescale instances
+        current_instance = rescale_instance(instance, factor)
+        current_corridor = (
+            rescale_instance(corridor.astype(float), factor) > 0
+        ).astype(int)
+        # downscale start and dest
+        try:
+            current_cfg["start_inds"] = (np.array(cfg["start_inds"]) /
+                                         factor).astype(int)
+            current_cfg["dest_inds"] = (np.array(cfg["dest_inds"]) /
+                                        factor).astype(int)
+            # make sure start and dest are in project region
+            current_corridor[tuple(current_cfg["start_inds"])] = 1
+            current_corridor[tuple(current_cfg["dest_inds"])] = 1
+        except KeyError:
+            raise RuntimeError(
+                "configuration must entail start and destination coordinates"
+            )
+            # downscale the KSP threshold if necessary
+        if "diversity_threshold" in current_cfg.keys(
+        ) and current_cfg["diversity_threshold"] > 1:
+            current_cfg["diversity_threshold"
+                        ] = cfg["diversity_threshold"] / factor
+        # downscale the pylon distances
+        if "pylon_dist_min" in current_cfg.keys():
+            current_cfg["pylon_dist_min"] = cfg["pylon_dist_min"] / factor
+            current_cfg["pylon_dist_max"] = cfg["pylon_dist_max"] / factor
+        return current_instance, current_corridor, current_cfg
+    else:
+        return instance, corridor, cfg
 
 
 def get_donut(radius_low, radius_high):
@@ -82,30 +109,25 @@ def get_donut(radius_low, radius_high):
     return pos_x - img_size, pos_y - img_size
 
 
-def angle(vec1, vec2):
+def angle(vec1, vec2, normalize=True):
     """
     Compute angle between two vectors
     :params vec1, vec2: two 1-dim vectors of same size, can be lists or array
     :returns angle
     """
-    vec1 = np.asarray(vec1)
-    vec2 = np.asarray(vec2)
-    # normalize
-    v1 = vec1 / np.linalg.norm(vec1)
-    v2 = vec2 / np.linalg.norm(vec2)
-    # special cases where arcos is nan
-    if np.allclose(v1, v2):
-        return 0
-    if np.allclose(-v1, v2):
-        return np.pi
+    # make array and normalize
+    if normalize:
+        vec1 = np.asarray(vec1)
+        vec2 = np.asarray(vec2)
+        vec1 = vec1 / np.linalg.norm(vec1)
+        vec2 = vec2 / np.linalg.norm(vec2)
     # compute angle
-    angle = np.arccos(np.dot(v1, v2))
+    angle = np.arccos(np.clip(np.dot(vec1, vec2), -1, 1))
     # want to use full 360 degrees
     if np.sin(angle) < 0:
         angle = 2 * np.pi - angle
     # can still be nan if v1 or v2 is 0
     if np.isnan(angle):
-        # print(vec1, vec2, v1, v2)
         return 0
         # raise ValueError("angle is nan, check whether vec1 or vec2 = 0")
     return angle
@@ -141,7 +163,7 @@ def get_half_donut(radius_low, radius_high, vec, angle_max=0.5 * np.pi):
     return new_tuples
 
 
-def discrete_angle_costs(ang, max_angle_lg, mode="linear"):
+def compute_angle_cost(ang, max_angle_lg, mode="linear"):
     """
     Implementation of different angle cost functions:
         linear: cost increases linearly with the angle
@@ -163,8 +185,10 @@ def discrete_angle_costs(ang, max_angle_lg, mode="linear"):
             return 0.3
         elif ang <= np.pi / 3:
             return 0.6
-        else:
+        elif ang <= max_angle_lg:
             return 1
+        else:
+            return np.inf
     else:
         raise NotImplementedError
 
@@ -205,7 +229,7 @@ def get_lg_donut(
                 ang = angle([-k, -l], [i, j])
                 # if smaller max angle and general outgoing half
                 if ang <= max_angle_lg and k * vec[0] + l * vec[1] >= 0:
-                    angle_norm = discrete_angle_costs(ang, max_angle_lg)
+                    angle_norm = compute_angle_cost(ang, max_angle_lg)
                     linegraph_tuples.append([[i, j], [k, l], angle_norm])
     return linegraph_tuples
 
@@ -229,80 +253,51 @@ def get_path_lines(cost_shape, paths):
     return path_dilation
 
 
-def dilation_dist(path_dilation, n_dilate=None):
+def get_pipeline(num_vertices, num_shifts, mem_limit):
     """
-    Compute surface of distances with dilation
-    :param path_dilation: binary array with zeros everywhere except for paths
-    :param dilate: How often to do dilation --> defines radious of corridor
-    :returns: 2dim array of same shape as path_dilation, with values
-    0 = infinite distance from path
-    n_dilation = path location
+    Compute the optimal downsampling factors in an iterative pipeline approach
+    Arguments:
+        num_vertices: Int, number of vertices in the graph
+        num_shifts: Int, number of neighbors for each vertex
+        mem_limit: Int, maximal number of edges allowed
     """
-    saved_arrs = [path_dilation]
-    if n_dilate is None:
-        # compute number of iterations: maximum distance of pixel to line
-        x_coords, y_coords = np.where(path_dilation)
-        x_len, y_len = path_dilation.shape
-        # dilate as much as the largest distance from the sides
-        n_dilate = max(
-            [
-                np.min(x_coords), x_len - np.max(x_coords),
-                np.min(y_coords), y_len - np.max(y_coords)
-            ]
-        )
-
-    # dilate
-    for _ in range(n_dilate):
-        path_dilation = binary_dilation(path_dilation)
-        saved_arrs.append(path_dilation)
-    saved_arrs = np.sum(np.array(saved_arrs), axis=0)
-    return saved_arrs
+    factor = 1
+    # return first one that fits in mem_limit
+    while (num_vertices * num_shifts) / factor**4 > mem_limit:
+        factor += 1
+    return np.arange(factor, 0, -1)
 
 
-def cdist_dist(path_dilation):
+def pipeline_corridor(paths, out_shape, n_shifts, mem_limit, next_factor):
     """
-    Use scipy cdist function to compute distances from path (SLOW!)
-    :param path_dilation: binary array with zeros everywhere except for paths
-    :returns: 2dim array of same shape as path_dilation, with values
-    0 = path
-    x = pixel has distance x from the path
-    """
-    saved_arrs = np.zeros(path_dilation.shape)
-    x_len, y_len = path_dilation.shape
-    # transform array to indices array as input to cdist
-    xa = np.array([[i, j] for i in range(x_len) for j in range(y_len)])
-    xb = np.swapaxes(np.vstack(np.where(path_dilation > 0)), 1, 0)
-    # print(xa.shape, xb.shape)
-    # main computation
-    all_dists = cdist(xa, xb)
-    # print(all_dists.shape)
-    out = np.min(all_dists, axis=1)
-    # re-transform indices to image
-    k = 0
-    for i in range(x_len):
-        for j in range(y_len):
-            saved_arrs[i, j] = out[k]
-            k += 1
-    return saved_arrs
+    Get the next corridor in a pipeline (automatically calibrate the corridor
+    width based on the next sampling factor)
 
-
-def get_distance_surface(out_shape, paths, mode="dilation", n_dilate=None):
+    Arguments:
+        path_points: list of arrays of shape (n, 2) containing the points on one
+                or more paths that have been found in the previous iteration
+        out_shape: Tuple, shape of array that will be the output corridor
+        n_shifts: Int, Number of neighbors per vertex (based on pylon_dist_min
+                and pylon_dist_max)
+        mem_limit: Int, Maximum number of edges
+        next_factor: Int, downsampling factor in the upcoming next iteration
     """
-    Given a list of paths, compute the corridor
-    :param mode: How to compute --> dilation or cdist
-    :param out_shape: desired output shape
-    :param paths: list of paths of possibly different lengths, each path is
-    a list of tuples
-    :returns: 2dim array showing the distance from the path
-    """
-    path_dilation = get_path_lines(out_shape, paths)
-    if mode == "dilation":
-        dist_surface = dilation_dist(path_dilation, n_dilate=n_dilate)
-    elif mode == "cdist":
-        dist_surface = cdist_dist(path_dilation)
-    else:
-        raise NotImplementedError
-    return dist_surface
+    # extend with bresenham line because otherwise gaps between the points
+    path_line = []
+    for path_points in paths:
+        for i in range(len(path_points) - 1):
+            line = bresenham_line(*path_points[i], *path_points[i + 1])
+            path_line.extend(line)
+    path_line = np.asarray(path_line)
+    # check how many pixels you get with 20 dilations
+    corridor = ut_ksp.fast_dilation(path_line, out_shape, iters=20)
+    # estimated new number of edges: nr pixels times nr neighbors
+    # divided by resolution by the power of 4
+    estimated_edges_10 = (np.sum(corridor > 0) * n_shifts) / (next_factor**4)
+    # take 20 times the factor dilations (but set to at least 10)
+    now_dist = max([(20 * mem_limit) / estimated_edges_10, 10])
+    corridor = ut_ksp.fast_dilation(path_line, out_shape, iters=int(now_dist))
+    return corridor
 
 
 def bresenham_line(x0, y0, x1, y1):
