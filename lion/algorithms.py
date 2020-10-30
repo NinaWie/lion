@@ -24,7 +24,9 @@ cfg - configuration: Dict with the following neceassay and optional parameters
     - angle_cost_function: 'linear' and 'discrete' are implemented
     - memory_limit: default is 1 trillion, if the number of edges is higher,
             an iterative pipeline procedure is used
-    - pipeline: pipeline in iterative approach is set automatically based on
+    - pipeline: List of decreasing positive integers, ending with 1
+            The pipeline in an iterative approach defines the downsampling
+            factors for each step. By default, it is set automatically based on
             the memory limit. It can however be set manually as well, e.g.
             [3,1] means downsample by factor of 3, compute optimal
             path, reduce region of interest to a corridor around
@@ -167,6 +169,11 @@ def optimal_pylon_spotting(
         "pipeline",
         ut_general.get_pipeline(instance_vertices, orig_shifts, mem_limit)
     )
+    assert all(
+        pipeline[i] > pipeline[i + 1] for i in range(len(pipeline) - 1)
+    ), "pipeline must consist of decreasing downsampling factors"
+    assert pipeline[
+        -1] == 1, "last factor in pipeline must be 1 (= no downsampling)"
 
     # execute pipeline
     if VERBOSE:
@@ -174,6 +181,8 @@ def optimal_pylon_spotting(
 
     # execute iterative shortest path computation
     for pipe_step, factor in enumerate(pipeline):
+        assert isinstance(factor, int) or float(factor).is_integer(
+        ), "downsampling factors in pipeline must be integers"
         # rescale and set parameters accordingly
         corridor = (corridor * original_corr > 0).astype(int)
         current_instance, current_corridor, current_cfg = ut_general.rescale(

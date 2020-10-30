@@ -61,9 +61,10 @@ def rescale(instance, corridor, cfg, factor):
         ).astype(int)
         # downscale start and dest
         try:
-            current_cfg["start_inds"] = (cfg["start_inds"] /
+            current_cfg["start_inds"] = (np.array(cfg["start_inds"]) /
                                          factor).astype(int)
-            current_cfg["dest_inds"] = (cfg["dest_inds"] / factor).astype(int)
+            current_cfg["dest_inds"] = (np.array(cfg["dest_inds"]) /
+                                        factor).astype(int)
             # make sure start and dest are in project region
             current_corridor[tuple(current_cfg["start_inds"])] = 1
             current_corridor[tuple(current_cfg["dest_inds"])] = 1
