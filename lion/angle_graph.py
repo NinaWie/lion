@@ -16,12 +16,7 @@ from numba.typed import List
 class AngleGraph():
 
     def __init__(
-        self,
-        instance,
-        instance_corr,
-        edge_instance=None,
-        directed=True,
-        verbose=1
+        self, instance, instance_corr, edge_instance=None, directed=True
     ):
         self.logger = logging.getLogger(__name__)
 
@@ -243,7 +238,7 @@ class AngleGraph():
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
         if np.any(shift_norms == 1):
-            self.logger.warn("raster approach - edge weight set to zero")
+            self.logger.warning("raster approach - edge weight set to zero")
             self.edge_weight = 0
 
         shift_norms = [np.linalg.norm(s) for s in self.shifts]
@@ -390,7 +385,7 @@ class AngleGraph():
     def get_shortest_path(self, start_inds, dest_inds, ret_only_path=False):
         dest_ind_stack = self.pos2node[tuple(dest_inds)]
         if not np.any(self.dists[dest_ind_stack, :] < np.inf):
-            self.logger.warn("WARNING: Empty path!")
+            self.logger.warning("WARNING: Empty path!")
             return [], [], 0
         tic = time.time()
         curr_point = dest_inds

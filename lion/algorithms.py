@@ -57,7 +57,6 @@ import lion.utils.costs as ut_cost
 import lion.utils.general as ut_general
 import time
 import logging
-import sys
 
 logger = logging.getLogger(__name__)
 
@@ -175,26 +174,29 @@ def optimal_pylon_spotting(
         -1] == 1, "last factor in pipeline must be 1 (= no downsampling)"
 
     # execute pipeline
-    if VERBOSE:
-        print("chosen pipeline:", pipeline)
+    logger.info(f"Pipeline set to: {pipeline}")
 
     # execute iterative shortest path computation
     for pipe_step, factor in enumerate(pipeline):
         assert isinstance(factor, int) or float(factor).is_integer(
         ), "downsampling factors in pipeline must be integers"
+        logger.info(
+            f"Start {pipe_step+1}th step of pipeline with factor {factor}"
+        )
         # rescale and set parameters accordingly
         corridor = (corridor * original_corr > 0).astype(int)
         current_instance, current_corridor, current_cfg = ut_general.rescale(
             original_inst, corridor, cfg, factor
         )
         # run shortest path computation
-        graph = AngleGraph(current_instance, current_corridor, verbose=VERBOSE)
+        graph = AngleGraph(current_instance, current_corridor)
         if k > 1:
             paths = _run_ksp(graph, current_cfg, k, algorithm=algorithm)
             paths = [np.array(path) * factor for path in paths]
         else:
             path, _, _ = graph.single_sp(**current_cfg)
             paths = [np.asarray(path) * factor]
+        logger.debug(f"got {len(paths)} paths in this step")
 
         # compute next corridor
         if pipe_step < len(pipeline) - 1:
@@ -236,6 +238,7 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp):
         return thresh
 
     thresh = cfg.get("diversity_threshold", set_thresh_automatically())
+    logger.debug(f"diversity threshold is {thresh}")
 
     # construct sp trees
     tic = time.time()

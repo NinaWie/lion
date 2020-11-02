@@ -1,6 +1,6 @@
 import logging
 
-LEVEL = logging.DEBUG
+LEVEL = logging.WARNING
 
 logger = logging.getLogger(__name__)
 
