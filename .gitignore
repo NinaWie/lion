@@ -9,6 +9,8 @@ __pycache__/
 # jupyter
 *ipynb
 *.npy
+*.prof
+*.code-workspace
 
 # Distribution / packaging
 .Python
