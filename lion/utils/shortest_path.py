@@ -58,7 +58,6 @@ def prepare_for_discrete(angle_cost_array, in_edges, out_edges=None):
 
     # get unique discrete costs and bounds
     discrete_costs = np.unique(angle_cost_array)
-    discrete_costs = discrete_costs[discrete_costs < np.inf]
     d_uni = len(discrete_costs)
 
     # get bounds
