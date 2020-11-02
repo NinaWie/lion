@@ -90,10 +90,10 @@ def edge_costs(
                 bresenham_edge_dist = 0
                 if edge_weight > 0:
                     bres_line = shift_lines[s] + np.array([v_x, v_y])
-                    edge_cost_list = np.zeros(len(bres_line))
+                    edge_cost_list = np.zeros(len(bres_line) - 2)
                     for k in range(1, len(bres_line) - 1):
-                        edge_cost_list[k] = edge_inst[bres_line[k][0],
-                                                      bres_line[k][1]]
+                        edge_cost_list[k - 1] = edge_inst[bres_line[k][0],
+                                                          bres_line[k][1]]
                     # TODO: mean or sum?
                     bresenham_edge_dist = edge_weight * np.mean(edge_cost_list)
                 neigh_ind = pos2node[neigh_x, neigh_y]
@@ -246,54 +246,6 @@ def sp_dag_reversed(stack, pos2node, shifts, angles_all, dists, edge_cost):
                 cost_and_angle = in_dists[pred] + angles_all[s, pred]
                 dists[-i - 1, s] = cost_and_angle + edge_cost[-i - 1, s]
                 preds[-i - 1, s] = pred
-    return dists, preds
-
-
-@jit(nopython=True)
-def sp_bf(
-    n_iters, stack, shifts, angles_all, dists, preds, instance, edge_cost
-):
-    """
-    Angle-weighted Bellman Ford algorithm for a general graph (not DAG)
-    - stack does not need to be sorted
-    Implemented with numba for performance - O(lm) where l is the
-    maximum length of the shortest path
-
-    Arguments:
-        n_iters: Int - At most the number of vertices in the graph, if known
-            then the maximum length of the shortest path
-        stack: List of tuples - order in which to consider the vertices
-            Note: For this algorithm it does not matter, because done for
-            a sufficient number of iterations
-        shifts: np array of size (x,2) --> indicating the neighborhood for each
-            vertex
-        angles_all: np array, angle cost for each shift (precomputed)
-        dists: np array of size m --> indicates distance of each edge from the
-            source vertex
-        preds: np array of size m --> indicates predecessor for each edge
-        instance: 2D array, for each vertex the cost
-        edge_cost: np array of size m --> edge cost for each edge
-    """
-    for _ in range(n_iters):
-        for i in range(len(stack)):
-            v_x = stack[i][0]
-            v_y = stack[i][1]
-            for s in range(len(shifts)):
-                neigh_x = v_x + shifts[s][0]
-                neigh_y = v_y + shifts[s][1]
-                if (
-                    0 <= neigh_x < dists.shape[1]
-                    and 0 <= neigh_y < dists.shape[2]
-                    and instance[neigh_x, neigh_y] < np.inf
-                ):
-                    # add up pylon cost + angle cost + edge cost
-                    cost_per_angle = dists[:, v_x, v_y] + angles_all[
-                        s] + instance[neigh_x, neigh_y] + edge_cost[s, neigh_x,
-                                                                    neigh_y]
-                    # update distances and predecessors if better
-                    if np.min(cost_per_angle) < dists[s, neigh_x, neigh_y]:
-                        dists[s, neigh_x, neigh_y] = np.min(cost_per_angle)
-                        preds[s, neigh_x, neigh_y] = np.argmin(cost_per_angle)
     return dists, preds
 
 
