@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 from lion.angle_graph import AngleGraph
 from lion.utils.general import bresenham_line
+from lion.algorithms import _compute_costs
 
 
 class TestImplicitLG(unittest.TestCase):
@@ -97,6 +98,11 @@ class TestImplicitLG(unittest.TestCase):
         dest_costs_gt = np.sum(a)
         self.assertTrue(np.isclose(cost_sum, dest_costs_gt))
         self.assertTrue(np.isclose(dest_costs, dest_costs_gt))
+        _, out_compute_cost_method = _compute_costs(
+            weighted_inst, path, edge_weight=self.cfg.edge_weight
+        )
+        self.assertEqual(np.sum(out_compute_cost_method), cost_sum)
+
         self.cfg.angle_weight = 0.25
         self.cfg.edge_weight = 0
 

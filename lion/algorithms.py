@@ -297,18 +297,7 @@ def _compute_costs(instance, path, edge_weight=0):
         edge_costs = ut_cost.compute_edge_costs(path, instance)
 
     # compute the geometric path costs TODO: after merge, add next 2 lines
-    # path_costs = ut_cost.compute_geometric_costs(
-    #     path, instance, edge_costs * edge_weight
-    # )
-    path = np.asarray(path)
-    geometric_costs = []
-    for p in range(len(path) - 1):
-        # compute distance inbetween
-        shift_costs = np.linalg.norm(path[p] - path[p + 1])
-        # compute geometric edge costs
-        geometric_costs.append(
-            shift_costs *
-            (0.5 * (instance[tuple(path[p])] + instance[tuple(path[p + 1])]))
-        )
-
+    geometric_costs = ut_cost.compute_geometric_costs(
+        path, instance, edge_costs * edge_weight
+    )
     return angles, geometric_costs
