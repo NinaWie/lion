@@ -37,17 +37,6 @@ def topological_sort_jit(v_x, v_y, shifts, to_visit, stack, curr_ind):
 
 
 @jit(nopython=True)
-def del_after_dest(stack, d_x, d_y):
-    # TODO: move to utils (not needed I think)
-    """
-    Helper method to use only the relevant part of the stack
-    """
-    for i in range(len(stack)):
-        if stack[i, 0] == d_x and stack[i, 1] == d_y:
-            return stack[i:]
-
-
-@jit(nopython=True)
 def edge_costs(
     stack, pos2node, shifts, edge_cost, instance, edge_inst, shift_lines,
     shift_costs, edge_weight
@@ -105,20 +94,10 @@ def edge_costs(
 
 
 @jit(nopython=True)
-def update_default(angles_all, dists):
-    """
-    Trivial updates working for any angle cost function
-    O(kl) for k in edges and l out edges
-    """
-    predecessors = np.zeros(len(angles_all), dtype=np.int64)
-    for s in range(len(angles_all)):
-        in_costs = dists + angles_all[s]
-        predecessors[s] = np.argmin(in_costs)
-    return predecessors
-
-
-@jit(nopython=True)
-def sp_dag(stack, pos2node, shifts, angles_all, dists, preds, edge_cost):
+def sp_dag(
+    stack, pos2node, shifts, angles_all, dists, preds, edge_cost, algorithm,
+    *args
+):
     """
     Angle-weighted dynamic program for Directed Acyclic Graphs (O(n))
     Stores the distances and predecessors for all IN edges for each vertex
@@ -145,8 +124,7 @@ def sp_dag(stack, pos2node, shifts, angles_all, dists, preds, edge_cost):
         v_y = stack[i, 1]
 
         # get predecessor for all outgoing edges at this vertex
-        # TODO: unnecessary updates for infeasible edges
-        predecessors = update("linear", angles_all, dists[i])
+        predecessors = algorithm(dists[i], *args)
 
         # get index and update
         for s in range(len(shifts)):
@@ -169,22 +147,9 @@ def sp_dag(stack, pos2node, shifts, angles_all, dists, preds, edge_cost):
 
 
 @jit(nopython=True)
-def update(func, angles_all, in_dists):
-    """
-    Interface to different update algorithms
-    """
-    if func == "linear":
-        return update_linear(angles_all, in_dists)
-    # TODO: use prepare_for_discrete from utils/shortest_path (but use it in
-    # angle graph) and pass the arguments efficiently somehow
-    # elif func == "discrete":
-    #     return update_discrete(angles_all, in_dists)
-    else:
-        return update_default(angles_all, in_dists)
-
-
-@jit(nopython=True)
-def sp_dag_reversed(stack, pos2node, shifts, angles_all, dists, edge_cost):
+def sp_dag_reversed(
+    stack, pos2node, shifts, angles_all, dists, edge_cost, algorithm, *args
+):
     """
     Angle-weighted dynamic program for Directed Acyclic Graphs (O(n))
     Stores the distances and predecessors for all OUT edges for each vertex
@@ -226,7 +191,7 @@ def sp_dag_reversed(stack, pos2node, shifts, angles_all, dists, edge_cost):
                 in_inds[s_in] = int(in_neigh_ind)
                 in_dists[s_in] = dists[in_neigh_ind, s_in]
 
-        predecessors = update("linear", angles_all, in_dists)
+        predecessors = algorithm(in_dists, *args)
 
         # update OUTGOING edge distances
         for s in range(n_neighbors):
@@ -247,163 +212,3 @@ def sp_dag_reversed(stack, pos2node, shifts, angles_all, dists, edge_cost):
                 dists[-i - 1, s] = cost_and_angle + edge_cost[-i - 1, s]
                 preds[-i - 1, s] = pred
     return dists, preds
-
-
-@jit(nopython=True)
-def update_linear(angles_all, dists):
-    """
-    Efficient update mechanism for LINEAR angle cost functions, i.e. the angle
-    cost increases linearly with the angle
-    Improves the runtime compared to update_default to O((k+l) log kl) instead
-    of O(kl) for a vertex update with k incoming and l outgoing edges
-
-    Arguments:
-        angles_all: 2Darray of size (len(shifts), len(shifts))
-                    precomputed angle cost for each tuple of edges
-        dists: 1D array of size (len(shifts)) which are the distances to the
-                    incoming edges
-    Returns:
-        1D int array containing the optimal predecessor for each out edge
-    """
-    n_neighbors = len(angles_all)
-
-    # sort the in edge distances and initialize
-    initial_S = np.argsort(dists)
-    marked_plus = np.zeros(n_neighbors)
-    marked_minus = np.zeros(n_neighbors)
-
-    # for now, assign all edges its straight line predecessor
-    predecessors = np.arange(n_neighbors)
-    preliminary_dist = np.zeros(n_neighbors)
-    for s in range(n_neighbors):
-        preliminary_dist[s] = dists[s] + angles_all[s, s]
-
-        # set current tuple: in edge and shift
-    # (out edge index unncessary because same as in edge)
-    current_in_edge = initial_S[0]
-    current_shift = 0
-    tuple_counter = 0
-
-    while tuple_counter < len(initial_S) - 1:
-        # best out edge is exactly the same shift!
-        current_out_edge = (current_in_edge + current_shift) % n_neighbors
-
-        # compute possible update value:
-        update_val = dists[current_in_edge] + angles_all[current_out_edge,
-                                                         current_in_edge]
-
-        if current_shift == 0:
-            marked = marked_plus[current_out_edge] and marked_minus[
-                current_out_edge]
-        elif current_shift > 0:
-            marked = marked_plus[current_out_edge]
-        else:
-            marked = marked_minus[current_out_edge]
-
-        # update only if better
-        if marked == 0 and np.around(update_val, 5) <= np.around(
-            preliminary_dist[current_out_edge], 5
-        ):
-            preliminary_dist[current_out_edge] = update_val
-            predecessors[current_out_edge] = int(current_in_edge)
-
-            # progress one edge further
-            progress_one = True
-
-        # already marked or update not successful:
-        # Consider first edge in other direction or next overall tuple
-        else:
-            progress_one = False
-            if current_shift > 0:
-                current_shift = -1
-            else:
-                # get next tuple from stack
-                tuple_counter += 1
-                current_in_edge = initial_S[tuple_counter]
-                current_shift = 0
-
-        # Progress to next edge
-        if progress_one:
-            if current_shift < 0:
-                current_shift -= 1
-            if current_shift <= 0:
-                marked_minus[current_out_edge] = 1
-            if current_shift >= 0:
-                current_shift += 1
-                marked_plus[current_out_edge] = 1
-
-    return predecessors
-
-
-@jit(nopython=True)
-def update_discrete(
-    dists, alphas, tree_index, tree_values, discrete_costs, bounds
-):
-    """
-    Efficient update mechanism for DISCRETE angle cost functions, i.e. there
-    are only d possible angle costs
-    Improves the runtime compared to update_default to O(dk log l) instead
-    of O(kl) for a vertex update with k incoming and l outgoing edges
-
-    Arguments:
-        angles_all: 2Darray of size (len(shifts), len(shifts))
-                    precomputed angle cost for each tuple of edges
-        dists: 1D array of size (len(shifts)) which are the distances to the
-                    incoming edges
-    Returns:
-        1D int array containing the optimal predecessor for each out edge
-    """
-    # sort tuples of dists and possible angle costs
-    d_uni = len(discrete_costs)
-    n_in_edges = len(alphas)
-
-    dists_tuples = np.zeros(n_in_edges * d_uni)
-    for i in range(n_in_edges):
-        for d in range(d_uni):
-            dists_tuples[d * n_in_edges + i] = dists[i] + discrete_costs[d]
-    sorted_inds = np.argsort(dists_tuples)
-    sorted_tuples = np.zeros((len(sorted_inds), 2), dtype=np.int64)
-    for s in range(len(sorted_inds)):
-        ind = sorted_inds[s]
-        sorted_tuples[s, 0] = ind % n_in_edges
-        sorted_tuples[s, 1] = ind // n_in_edges
-
-    predecessor = np.zeros(len(tree_values)) - 1
-    is_updated = 0
-
-    for s in range(len(sorted_tuples)):
-        in_edge = sorted_tuples[s, 0]
-        dis_step = sorted_tuples[s, 1]
-        # in edge is the index of the incoming edge --> get corresponding alpha
-        for j in range(2):
-            # compute the current range of betas
-            if j == 0:
-                min_angle_bound = minus(alphas[in_edge], bounds[dis_step, 1])
-                max_angle_bound = minus(alphas[in_edge], bounds[dis_step, 0])
-            else:
-                min_angle_bound = plus(alphas[in_edge], bounds[dis_step, 0])
-                max_angle_bound = plus(alphas[in_edge], bounds[dis_step, 1])
-            # find the corresponding range of indices (binary search)
-            fake_ind = np.arange(len(tree_values))
-            min_angle_index = find(min_angle_bound, tree_values, fake_ind)
-            if min_angle_index != 0 or min_angle_bound > tree_values[0]:
-                min_angle_index += 1
-            max_angle_index = find(max_angle_bound, tree_values, fake_ind) + 1
-            if max_angle_bound < min_angle_bound:
-                inds_inbetween = np.concatenate(
-                    (
-                        tree_index[min_angle_index:],
-                        tree_index[:max_angle_index]
-                    )
-                )
-            else:
-                inds_inbetween = tree_index[min_angle_index:max_angle_index]
-            # update predecessor
-            for index in inds_inbetween:
-                if predecessor[index] < 0:
-                    predecessor[index] = in_edge
-                    is_updated += 1
-        # TODO: experiment whether it's worth to make the tree smaller
-        if is_updated == len(tree_values):
-            break
-    return predecessor

@@ -1,7 +1,7 @@
 import lion.utils.general as ut
 import lion.utils.costs as ut_cost
 import lion.utils.ksp as ut_ksp
-
+from lion.utils.shortest_path import get_algorithm
 from lion.fast_shortest_path import (
     sp_dag, sp_dag_reversed, topological_sort_jit, edge_costs
 )
@@ -260,15 +260,17 @@ class AngleGraph():
         if self.verbose:
             print("Computed edge instance", time.time() - tic)
         tic = time.time()
+        # prepare for discrete if it is a discrete angle cost function:
+        self.algorithm, self.args = get_algorithm(
+            self.angle_cost_function, self.angle_cost_array, self.shifts
+        )
+
         # RUN - either directed acyclic or BF algorithm
         if self.is_dag:
-            if self.angle_cost_function == "linear" and len(self.shifts) > 100:
-                algorithm = efficient_update_sp
-            else:
-                algorithm = sp_dag
-            self.dists, self.preds = algorithm(
+            self.dists, self.preds = sp_dag(
                 self.stack_array, self.pos2node, np.array(self.shifts),
-                self.angle_cost_array, self.dists, self.preds, self.edge_cost
+                self.angle_cost_array, self.dists, self.preds, self.edge_cost,
+                self.algorithm, self.args
             )
         else:
             raise NotImplementedError(
@@ -301,7 +303,7 @@ class AngleGraph():
         self.dists_ba, self.preds_ba = sp_dag_reversed(
             self.stack_array, self.pos2node,
             np.array(self.shifts) * (-1), self.angle_cost_array, self.dists_ba,
-            self.edge_cost
+            self.edge_cost, self.algorithm, self.args
         )
         self.time_logs["shortest_path_tree"] = round(time.time() - tic, 3)
         if self.verbose:

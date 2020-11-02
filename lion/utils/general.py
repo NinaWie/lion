@@ -189,19 +189,22 @@ def compute_angle_cost(ang, max_angle_lg, mode="linear"):
             return 1
         else:
             return np.inf
+    elif mode == "squared":
+        return (ang / max_angle_lg)**2
     else:
         raise NotImplementedError
 
 
-def angle_360(vec1, vec2):
-    vec1 = np.asarray(vec1)
-    vec2 = np.asarray(vec2)
-    # normalize
-    v1 = vec1 / np.linalg.norm(vec1)
-    v2 = vec2 / np.linalg.norm(vec2)
+def angle_360(vec1, vec2, normalize=True):
+    if normalize:
+        vec1 = np.asarray(vec1)
+        vec2 = np.asarray(vec2)
+        # normalize
+        vec1 = vec1 / np.linalg.norm(vec1)
+        vec2 = vec2 / np.linalg.norm(vec2)
     # dot product and determinant
-    x1, y1 = v1
-    x2, y2 = v2
+    x1, y1 = vec1
+    x2, y2 = vec2
     dot = x1 * x2 + y1 * y2  # dot product
     det = x1 * y2 - y1 * x2  # determinant
     angle = np.arctan2(det, dot)
