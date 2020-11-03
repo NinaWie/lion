@@ -16,11 +16,12 @@ def get_algorithm(func, angle_cost_array, in_edges, out_edges=None):
         algorithm: function, update algorithm to be used
         args: Tuple, corresponding arguments
     """
-    if func == "linear" and len(angle_cost_array) > 100:
-        # >100 because otherwise hidden factors in O - will be slower
+    if func == "linear" and len(angle_cost_array) > 50:
+        # >50 because hidden factors in O-notation - will be slower
         args = (angle_cost_array)
         algorithm = update_linear
-    elif func == "discrete":
+    elif func == "discrete" and len(angle_cost_array) > 100:
+        # >100 because hidden factors in O-notation - will be slower
         args = prepare_for_discrete(angle_cost_array, in_edges, out_edges)
         algorithm = update_discrete
     else:

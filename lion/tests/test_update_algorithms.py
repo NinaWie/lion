@@ -38,7 +38,7 @@ class TestUpdateAlgs(unittest.TestCase):
         plt.savefig(save_name)
 
     def test_linear(self) -> None:
-        """ Test the implicit line graph construction """
+        """ LINEAR """
         self.cfg["angle_cost_function"] = "linear"
         self.cfg["max_angle_lg"] = np.pi
         graph = AngleGraph(self.instance, self.corridor, verbose=0)

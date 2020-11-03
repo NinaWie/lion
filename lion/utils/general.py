@@ -4,6 +4,7 @@ from numba import jit
 import lion.utils.ksp as ut_ksp
 from scipy.ndimage.morphology import binary_dilation
 from scipy.spatial.distance import cdist
+from scipy.ndimage.morphology import distance_transform_edt
 
 __all__ = [
     "get_half_donut", "angle", "compute_angle_cost", "bresenham_line",
@@ -286,20 +287,24 @@ def pipeline_corridor(paths, out_shape, n_shifts, mem_limit, next_factor):
         next_factor: Int, downsampling factor in the upcoming next iteration
     """
     # extend with bresenham line because otherwise gaps between the points
-    path_line = []
+    distance_transform = np.ones(out_shape)
     for path_points in paths:
         for i in range(len(path_points) - 1):
             line = bresenham_line(*path_points[i], *path_points[i + 1])
-            path_line.extend(line)
-    path_line = np.asarray(path_line)
+            for (x, y) in line:
+                distance_transform[x, y] = 0
+    # compute distance transform:
+    distance_transform = distance_transform_edt(distance_transform)
     # check how many pixels you get with 20 dilations
-    corridor = ut_ksp.fast_dilation(path_line, out_shape, iters=20)
+    corridor = (distance_transform < 20).astype(int)
     # estimated new number of edges: nr pixels times nr neighbors
     # divided by resolution by the power of 4
-    estimated_edges_10 = (np.sum(corridor > 0) * n_shifts) / (next_factor**4)
+    estimated_edges_10 = (np.sum(corridor) * n_shifts) / (next_factor**4)
     # take 20 times the factor dilations (but set to at least 10)
     now_dist = max([(20 * mem_limit) / estimated_edges_10, 10])
-    corridor = ut_ksp.fast_dilation(path_line, out_shape, iters=int(now_dist))
+    # set to at least 10 but at most a fifth of the instance size
+    # now_dist = min([max([out_shape[0], out_shape[1]]) / 5, now_dist])
+    corridor = (distance_transform < now_dist).astype(int)
     return corridor
 
 
