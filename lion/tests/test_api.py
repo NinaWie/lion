@@ -32,7 +32,6 @@ class TestAPI(unittest.TestCase):
     cfg = dict()
     cfg["start_inds"] = [6, 6]
     cfg["dest_inds"] = [94, 90]
-    cfg["angle_cost_function"] = "discrete"
     test_instance[tuple(cfg["start_inds"])] = np.random.rand(1)[0]
     test_instance[tuple(cfg["dest_inds"])] = np.random.rand(1)[0]
 

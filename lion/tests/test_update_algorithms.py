@@ -51,7 +51,7 @@ class TestUpdateAlgs(unittest.TestCase):
         graph.dists[0, :] = 0
         graph.preds = np.zeros(graph.dists.shape) - 1
         graph.angle_cost_function = "some_non_existant"
-        graph.add_edges(**self.cfg)
+        graph.build_source_sp_tree(**self.cfg)
 
         self.assertTrue(
             np.all(np.isclose(gt_angle_cost_arr, graph.angle_cost_array))
@@ -97,7 +97,7 @@ class TestUpdateAlgs(unittest.TestCase):
         graph.dists[0, :] = 0
         graph.preds = np.zeros(graph.dists.shape) - 1
         graph.angle_cost_function = "some_non_existant"
-        graph.add_edges(**self.cfg)
+        graph.build_source_sp_tree(**self.cfg)
 
         self.assertTrue(np.all(gt_angle_cost_arr == graph.angle_cost_array))
         self.assertTrue(np.all(np.isclose(gt_dists, graph.dists)))

@@ -241,7 +241,7 @@ class AngleGraph():
     # --------------------------------------------------------------------
     # SHORTEST PATH COMPUTATION
 
-    def add_edges(self, edge_weight=0.2, **kwargs):
+    def build_source_sp_tree(self, edge_weight=0.2, **kwargs):
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
         if np.any(shift_norms == 1):
@@ -283,9 +283,9 @@ class AngleGraph():
             print("time edges:", round(time.time() - tic, 3))
 
     # ----------------------------------------------------------------------
-    # SHORTEST PATH TREE
+    # REVERSED TREE FOR KSP
 
-    def get_shortest_path_tree(self, source, target):
+    def build_dest_sp_tree(self, source, target):
         """
         Compute costs from dest to all edges
         """
@@ -373,7 +373,7 @@ class AngleGraph():
     # Functions to output path (backtrack) and corresponding costs
 
     def transform_path(self, path):
-        raw_resistances = np.array([[self.instance[p[0], p[1]]] for p in path])
+        # raw_resist = np.array([[self.instance[p[0], p[1]]] for p in path])
 
         # compute angle costs
         ang_costs = ut_cost.compute_angle_costs(
@@ -509,7 +509,7 @@ class AngleGraph():
         if self.verbose:
             print("2) Initialize distances to inf and predecessors")
         # MAIN ALGORITHM
-        self.add_edges(**kwargs)
+        self.build_source_sp_tree(**kwargs)
         if self.verbose:
             print("3) Compute source shortest path tree")
             print("number of vertices and edges:", self.n_nodes, self.n_edges)
@@ -530,5 +530,5 @@ class AngleGraph():
         # Build shortest path tree rooted in source
         path, path_costs, cost_sum = self.single_sp(**kwargs)
         # Build shortest path tree rooted in target
-        self.get_shortest_path_tree(self.start_inds, self.dest_inds)
+        self.build_dest_sp_tree(self.start_inds, self.dest_inds)
         return path, path_costs, cost_sum

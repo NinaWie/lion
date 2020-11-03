@@ -1,6 +1,5 @@
 from numba import jit
 import numpy as np
-from lion.utils.shortest_path import find, minus, plus
 
 
 @jit(nopython=True)

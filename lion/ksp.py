@@ -9,8 +9,8 @@ class KSP:
     def __init__(self, graph):
         self.graph = graph
         try:
-            test = self.graph.dists_ba.shape
-            test = self.graph.preds_ba.shape
+            test = self.graph.dists_ba.shape  # noqa
+            test = self.graph.preds_ba.shape  # noqa
         except AttributeError:
             raise RuntimeError(
                 "Cannot initialize KSP object with a graph without"
@@ -110,10 +110,12 @@ class KSP:
             self.graph.start_inds, self.graph.dest_inds: vertices -->
             list with two entries
             k: int: number of paths to output
-            max_intersection: ratio of vertices that are allowed to be 
+            max_intersection: ratio of vertices that are allowed to be
             contained in the previously computed SPs
         """
-        assert 0 <= thresh <= 1, "threshold for min_set_intersection algorithm must be between 0 and 1"
+        assert 0 <= thresh <= 1, "threshold for min_set_intersection\
+             must be between 0 and 1"
+
         tic = time.time()
 
         best_paths = [np.array(self.graph.best_path)]
