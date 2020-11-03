@@ -133,8 +133,6 @@ class AngleGraph():
 
     def set_edge_costs(
         self,
-        layer_classes=["resistance"],
-        class_weights=[1],
         angle_weight=0,
         max_angle_lg=np.pi,
         angle_cost_function='linear',
@@ -157,37 +155,32 @@ class AngleGraph():
                         Function defines the cost per angle, implemented in
                         utils/general.py (function compute_angle_cost)
         """
-        tic = time.time()
-        assert len(layer_classes) == len(
-            class_weights
-        ), f"classes ({len(layer_classes)}) and\
-            weights({len(class_weights)}) must be of same length!"
-
         assert 0 <= angle_weight <= 1, "angle weight must be between 0 and 1"
-        # set classes
-        self.cost_classes = ["angle"] + list(layer_classes)
-        # set weights and add angle weight
-        self.cost_weights = np.array(
-            [angle_weight] +
-            list(np.asarray(class_weights) * (1 - angle_weight))
-        )
-        self.cost_weights = self.cost_weights / np.sum(self.cost_weights)
-        if self.verbose:
-            print("cost weights", self.cost_weights)
 
-        # set angle weight and already multiply with angles
-        self.angle_weight = self.cost_weights[0]
+        # set weights and add angle weight
+        self.resistance_weight = (1 - angle_weight)
+        # set angle weight
+        self.angle_weight = angle_weight
+
         # in precomute angles, it is multiplied with angle weights
         self.angle_cost_array = self._precompute_angles(
             max_angle_lg, angle_cost_function
         )
+        # multiply with angle weights, need to prevent that not inf * 0
+        non_inf = self.angle_cost_array < np.inf
+        self.angle_cost_array[
+            non_inf] = self.angle_cost_array[non_inf] * self.angle_weight
+
+        # multiply resistances with other corresponding weight
+        non_inf = self.instance < np.inf
+        self.instance[non_inf
+                      ] = self.instance[non_inf] * self.resistance_weight
 
         # If it is not allowed to traverse forbidden areas with a cable,
         # transform edge instance accordingly
         if not cable_allowed:
             self.edge_inst[self.instance == np.inf] = np.inf
 
-        self.time_logs["add_all_edges"] = round(time.time() - tic, 3)
         if self.verbose:
             print("instance shape", self.instance.shape)
 
@@ -233,9 +226,6 @@ class AngleGraph():
         angles_all[angles_all > 1] = np.inf
 
         self.time_logs["compute_angles"] = round(time.time() - tic, 3)
-        # multiply with angle weights, need to prevent that not inf * 0
-        angles_all[angles_all < np.inf
-                   ] = angles_all[angles_all < np.inf] * self.angle_weight
         return angles_all
 
     # --------------------------------------------------------------------
