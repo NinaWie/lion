@@ -1,7 +1,7 @@
 import lion.utils.general as ut
 import lion.utils.costs as ut_cost
 import lion.utils.ksp as ut_ksp
-from lion.utils.shortest_path import get_algorithm
+from lion.utils.shortest_path import get_update_algorithm
 from lion.fast_shortest_path import (
     sp_dag, sp_dag_reversed, topological_sort_jit, edge_costs
 )
@@ -251,7 +251,7 @@ class AngleGraph():
             print("Computed edge instance", time.time() - tic)
         tic = time.time()
         # prepare for discrete if it is a discrete angle cost function:
-        self.algorithm, self.args = get_algorithm(
+        self.algorithm, self.args = get_update_algorithm(
             self.angle_cost_function, self.angle_cost_array, self.shifts
         )
 

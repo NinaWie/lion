@@ -3,9 +3,12 @@ import numpy as np
 from lion.utils.general import angle, angle_360
 
 
-def get_algorithm(func, angle_cost_array, in_edges, out_edges=None):
+def get_update_algorithm(func, angle_cost_array, in_edges, out_edges=None):
     """
-    Interface to update algorithms
+    Interface to update algorithms - dependent on the angle cost function,
+    choose the appropriate update algorithm and return it with the necessary
+    arguments
+
     Arguments:
         func: str defining the angle cost function
         angle_cost_array: n x n 2D numpy array containing the costs for each
@@ -202,34 +205,50 @@ def update_linear(dists, angles_all):
 
 
 @jit(nopython=True)
-def plus(a, b):
+def _circular_plus(a, b):
     """
-    Circular plus
+    Plus op on circular x-axis: If sum is greater than 2pi, rotate to beginning
+    Arguments:
+        a,b: floats between 0 and 2 * np.pi (angle values)
     """
-    if a + b > 2 * np.pi:
-        return a + b - 2 * np.pi
-    return a + b
+    return (a + b) % (2 * np.pi)
 
 
 @jit(nopython=True)
-def find(key, tree_values, tree_index):
+def _binary_index_search(key, tree_values, tree_index):
     """
-    Will always return the one lower --> recursive binary search
+    Binary search to find the closest (lower) value to <key> in an array
+    (recursive method)
+
+    Arguments:
+        key: Float, the value to look for
+        tree_values: 1D sorted array of values in the tree
+        tree_index: 1D int array of same length as tree_values, contains the
+                original indices for the sorted value of tree_values
+    Returns:
+        The index in tree_index where the corresponding value in tree_values
+        is closest to key (closest from left side, i.e. the lower one)
     """
     tree_len = len(tree_values)
     if tree_len == 1:
         return tree_index[0]
     middle = tree_len // 2
     if key < tree_values[middle]:
-        return find(key, tree_values[:middle], tree_index[:middle])
+        return _binary_index_search(
+            key, tree_values[:middle], tree_index[:middle]
+        )
     else:
-        return find(key, tree_values[middle:], tree_index[middle:])
+        return _binary_index_search(
+            key, tree_values[middle:], tree_index[middle:]
+        )
 
 
 @jit(nopython=True)
-def minus(a, b):
+def _circular_minus(a, b):
     """
-    Circular minus - if smaller zero, then subtract from 2 pi
+    Minus op on circular x-axis - if smaller zero, then subtract from 2 pi
+    Arguments:
+        a,b: floats between 0 and 2 * np.pi (angle values)
     """
     if a < b:
         return 2 * np.pi - b + a
@@ -279,17 +298,29 @@ def update_discrete(dists, args):
         for j in range(2):
             # compute the current range of betas
             if j == 0:
-                min_angle_bound = minus(alphas[in_edge], bounds[dis_step, 1])
-                max_angle_bound = minus(alphas[in_edge], bounds[dis_step, 0])
+                min_angle_bound = _circular_minus(
+                    alphas[in_edge], bounds[dis_step, 1]
+                )
+                max_angle_bound = _circular_minus(
+                    alphas[in_edge], bounds[dis_step, 0]
+                )
             else:
-                min_angle_bound = plus(alphas[in_edge], bounds[dis_step, 0])
-                max_angle_bound = plus(alphas[in_edge], bounds[dis_step, 1])
+                min_angle_bound = _circular_plus(
+                    alphas[in_edge], bounds[dis_step, 0]
+                )
+                max_angle_bound = _circular_plus(
+                    alphas[in_edge], bounds[dis_step, 1]
+                )
             # find the corresponding range of indices (binary search)
             fake_ind = np.arange(len(tree_values))
-            min_angle_index = find(min_angle_bound, tree_values, fake_ind)
+            min_angle_index = _binary_index_search(
+                min_angle_bound, tree_values, fake_ind
+            )
             if min_angle_index != 0 or min_angle_bound > tree_values[0]:
                 min_angle_index += 1
-            max_angle_index = find(max_angle_bound, tree_values, fake_ind) + 1
+            max_angle_index = _binary_index_search(
+                max_angle_bound, tree_values, fake_ind
+            ) + 1
             if max_angle_bound < min_angle_bound:
                 inds_inbetween = np.concatenate(
                     (
