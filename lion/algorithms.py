@@ -60,10 +60,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-__all__ = [
-    "optimal_route", "optimal_pylon_spotting", "ksp_routes", "ksp_pylons"
-]
-
 
 def _initialize_graph(instance, cfg):
     """
