@@ -124,7 +124,7 @@ def optimal_route(instance, cfg):
 
     # compute path
     tic_raster = time.time()
-    path, _, _ = graph.single_sp(**cfg)
+    path = graph.single_sp(**cfg)
 
     logger.info(f"Overall timefor optimal route: {time.time() - tic_raster}")
     logger.info(f"time logs: {graph.time_logs}")
@@ -194,7 +194,7 @@ def optimal_pylon_spotting(
             paths = _run_ksp(graph, current_cfg, k, algorithm=algorithm)
             paths = [np.array(path) * factor for path in paths]
         else:
-            path, _, _ = graph.single_sp(**current_cfg)
+            path = graph.single_sp(**current_cfg)
             paths = [np.asarray(path) * factor]
         logger.debug(f"got {len(paths)} paths in this step")
 
@@ -245,9 +245,7 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp):
     _ = graph.sp_trees(**cfg)
     # compute k shortest paths
     ksp_processor = KSP(graph)
-    ksp_out = algorithm(ksp_processor, k, thresh=thresh)
-    # extract path itself
-    ksp_paths = [k[0] for k in ksp_out]
+    ksp_paths = algorithm(ksp_processor, k, thresh=thresh)
     logger.info(f"Time for run ksp: {time.time() - tic}")
     return ksp_paths
 
@@ -286,18 +284,3 @@ def ksp_pylons(instance, cfg, k, algorithm=KSP.ksp):
         A list of paths (each path is again a list of X Y coordinates)
     """
     return optimal_pylon_spotting(instance, cfg, k=k, algorithm=algorithm)
-
-
-def _compute_costs(instance, path, edge_weight=0):
-    # compute angle costs
-    angles = ut_cost.compute_raw_angles(path)[:-1]
-    # compute the cable costs (bresenham line between pylons)
-    edge_costs = np.zeros(len(path))
-    if edge_weight != 0:
-        edge_costs = ut_cost.compute_edge_costs(path, instance)
-
-    # compute the geometric path costs TODO: after merge, add next 2 lines
-    geometric_costs = ut_cost.compute_geometric_costs(
-        path, instance, edge_costs * edge_weight
-    )
-    return angles, geometric_costs
