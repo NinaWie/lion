@@ -1,11 +1,8 @@
 import numpy as np
 from numba import jit
+import logging
 
-__all__ = [
-    "get_sp_from_preds", "get_sp_dest_shift", "get_sp_start_shift",
-    "path_distance", "similarity", "pairwise_dists", "_flat_ind_to_inds",
-    "intersecting_ratio"
-]
+logger = logging.getLogger(__name__)
 
 
 @jit(nopython=True)
@@ -44,6 +41,9 @@ def fast_dilation(path_points, arr_shape, iters=50):
         0 means more than iters distance, iters means distance 0
     """
     arr = np.zeros(arr_shape)
+    if iters > arr_shape[0] and iters > arr_shape[1]:
+        # logger.warn("corridor width was larger than instance size")
+        return np.ones(arr_shape)
     for i in range(len(path_points)):
         arr[path_points[i][0], path_points[i][1]] = 1
 
