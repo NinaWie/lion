@@ -3,6 +3,7 @@ import unittest
 from types import SimpleNamespace
 from lion.angle_graph import AngleGraph
 from lion.utils.general import bresenham_line
+from lion.utils.costs import compute_geometric_costs
 
 
 class TestImplicitLG(unittest.TestCase):
@@ -42,10 +43,9 @@ class TestImplicitLG(unittest.TestCase):
 
     def test_correct_shortest_path(self) -> None:
         """ Test the implicit line graph construction """
-        graph = AngleGraph(
-            self.example_inst, self.working_expl_corr, verbose=0
-        )
-        path, path_costs, cost_sum = graph.single_sp(**vars(self.cfg))
+        graph = AngleGraph(self.example_inst, self.working_expl_corr)
+        path = graph.single_sp(**vars(self.cfg))
+        path, path_costs, cost_sum = graph.transform_path(path)
         self.assertListEqual(graph.cost_weights.tolist(), [0.25, 0.75])
         self.assertTupleEqual(graph.instance.shape, self.expl_shape)
         self.assertEqual(np.sum(graph.cost_weights), 1)
@@ -70,12 +70,11 @@ class TestImplicitLG(unittest.TestCase):
             self.assertEqual(self.example_inst[i, j], 1)
 
     def test_edge_costs(self) -> None:
-        graph = AngleGraph(
-            self.example_inst, self.working_expl_corr, verbose=0
-        )
+        graph = AngleGraph(self.example_inst, self.working_expl_corr)
         self.cfg.angle_weight = 0
         self.cfg.edge_weight = 0.5
-        path, _, cost_sum = graph.single_sp(**vars(self.cfg))
+        path = graph.single_sp(**vars(self.cfg))
+        path, _, cost_sum = graph.transform_path(path)
         dest_ind = graph.pos2node[tuple(self.dest_inds)]
         dest_costs = np.min(graph.dists[dest_ind])
         a = []
@@ -101,11 +100,16 @@ class TestImplicitLG(unittest.TestCase):
         dest_costs_gt = np.sum(a)
         self.assertTrue(np.isclose(cost_sum, dest_costs_gt))
         self.assertTrue(np.isclose(dest_costs, dest_costs_gt))
+        out_compute_cost_method = compute_geometric_costs(
+            path, weighted_inst, edge_weight=self.cfg.edge_weight
+        )
+        self.assertEqual(np.sum(out_compute_cost_method), cost_sum)
+
         self.cfg.angle_weight = 0.25
         self.cfg.edge_weight = 0
 
     def test_angle_sp(self) -> None:
-        graph = AngleGraph(self.example_inst, self.high_angle_corr, verbose=0)
+        graph = AngleGraph(self.example_inst, self.high_angle_corr)
         _ = graph.single_sp(**vars(self.cfg))
         # assert that destination can NOT be reached
         dest_ind = graph.pos2node[tuple(self.dest_inds)]
@@ -113,8 +117,9 @@ class TestImplicitLG(unittest.TestCase):
 
         # NEXT TRY: more angles allowed
         self.cfg.max_angle_lg = np.pi
-        graph = AngleGraph(self.example_inst, self.high_angle_corr, verbose=0)
-        path, path_costs, cost_sum = graph.single_sp(**vars(self.cfg))
+        graph = AngleGraph(self.example_inst, self.high_angle_corr)
+        path = graph.single_sp(**vars(self.cfg))
+        path, _, cost_sum = graph.transform_path(path)
         # assert that dest CAN be reached
         dest_ind = graph.pos2node[tuple(self.dest_inds)]
         self.assertTrue(np.min(graph.dists[dest_ind]) < np.inf)

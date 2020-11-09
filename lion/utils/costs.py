@@ -8,11 +8,6 @@ try:
 except ModuleNotFoundError:
     pass
 
-__all__ = [
-    "compute_angle_costs", "compute_edge_costs", "compute_raw_angles",
-    "compute_geometric_costs"
-]
-
 
 def compute_edge_costs(path, instance):
     """
@@ -36,7 +31,7 @@ def compute_edge_costs(path, instance):
     return np.array(e_costs)
 
 
-def compute_geometric_costs(path, instance, edge_costs):
+def compute_geometric_costs(path, instance, edge_weight=0):
     """
     Compute geometric costs along the path
     Arguments:
@@ -47,6 +42,11 @@ def compute_geometric_costs(path, instance, edge_costs):
         List of geometric edge costs along the path
     """
     path = np.array(path)
+    # compute the cable costs (bresenham line between pylons)
+    edge_costs = np.zeros(len(path))
+    if edge_weight != 0:
+        edge_costs = compute_edge_costs(path, instance) * edge_weight
+
     geometric_costs = []
     for p in range(len(path) - 1):
         # cable costs
