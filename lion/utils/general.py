@@ -1,15 +1,10 @@
 import numpy as np
 from numba import jit
-
+import logging
 import lion.utils.ksp as ut_ksp
-from scipy.ndimage.morphology import binary_dilation
-from scipy.spatial.distance import cdist
 from scipy.ndimage.morphology import distance_transform_edt
 
-__all__ = [
-    "get_half_donut", "angle", "compute_angle_cost", "bresenham_line",
-    "angle_360", "pipeline_corridor", "rescale"
-]
+logger = logging.getLogger(__name__)
 
 
 def normalize(instance):
@@ -305,6 +300,7 @@ def pipeline_corridor(paths, out_shape, n_shifts, mem_limit, next_factor):
     # set to at least 10 but at most a fifth of the instance size
     # now_dist = min([max([out_shape[0], out_shape[1]]) / 5, now_dist])
     corridor = (distance_transform < now_dist).astype(int)
+    logger.info(f"Next corridor around path was set to width {now_dist}")
     return corridor
 
 

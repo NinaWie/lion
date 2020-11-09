@@ -41,7 +41,7 @@ class TestUpdateAlgs(unittest.TestCase):
         """ LINEAR """
         self.cfg["angle_cost_function"] = "linear"
         self.cfg["max_angle_lg"] = np.pi
-        graph = AngleGraph(self.instance, self.corridor, verbose=0)
+        graph = AngleGraph(self.instance, self.corridor)
         _ = graph.single_sp(**self.cfg)
         gt_angle_cost_arr = graph.angle_cost_array.copy()
         gt_dists = graph.dists.copy()
@@ -87,7 +87,7 @@ class TestUpdateAlgs(unittest.TestCase):
         """ DISCRETE """
         self.cfg["angle_cost_function"] = "discrete"
         self.cfg["max_angle_lg"] = np.pi / 4
-        graph = AngleGraph(self.instance, self.corridor, verbose=0)
+        graph = AngleGraph(self.instance, self.corridor)
         _ = graph.single_sp(**self.cfg)
         gt_angle_cost_arr = graph.angle_cost_array.copy()
         gt_dists = graph.dists.copy()

@@ -2,6 +2,9 @@ import numpy as np
 import time
 from scipy.ndimage.morphology import distance_transform_edt
 import lion.utils.ksp as ut_ksp
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class KSP:
@@ -82,7 +85,7 @@ class KSP:
             feasible_vertices = (corridor + 1) * min_node_dists
 
             if ~np.any(feasible_vertices < np.inf):
-                return [self.graph.transform_path(p) for p in best_paths]
+                return best_paths
 
             # get min vertex
             current_best = np.nanargmin(feasible_vertices.flatten())
@@ -98,9 +101,8 @@ class KSP:
                 aux_arr[x, y] = 0
 
         self.graph.time_logs["ksp"] = round(time.time() - tic, 3)
-        if self.graph.verbose:
-            print("compute KSP time:", self.graph.time_logs["ksp"])
-        return [self.graph.transform_path(p) for p in best_paths]
+        logger.debug(f"compute KSP time: {self.graph.time_logs['ksp']}")
+        return best_paths
 
     def min_set_intersection(self, k, thresh=0.5):
         """
@@ -159,6 +161,5 @@ class KSP:
                 if len(best_paths) >= k:
                     break
         self.graph.time_logs["ksp"] = round(time.time() - tic, 3)
-        if self.graph.verbose:
-            print("FIND KSP time:", self.graph.time_logs["ksp"])
-        return [self.graph.transform_path(path) for path in best_paths]
+        logger(f"FIND KSP time: {self.graph.time_logs['ksp']}")
+        return best_paths
