@@ -22,8 +22,13 @@ cfg - configuration: Dict with the following neceassay and optional parameters
             start to end (default: pi/2)
     - max_angle_lg: maximum angle at a pylon (default: pi)
     - angle_cost_function: 'linear' and 'discrete' are implemented
-    - memory_limit: default is 1 trillion, if the number of edges is higher,
-            an iterative pipeline procedure is used
+    - memory_limit: Maximum number of edges that is allowed (default: 50 Mio)
+            If the number of edges is higher, an iterative procedure is used.
+            Relation of edges to actual memory:
+            For single SP, space for two float arrays with #edges cells are
+                allocated -> 2 * #edges * 8 bytes (float64) = 16 x #edges bytes
+            For multi SP there will be four float arrays with #edges cells
+                -> 32 x #edges bytes
     - pipeline: List of decreasing positive integers, ending with 1
             The pipeline in an iterative approach defines the downsampling
             factors for each step. By default, it is set automatically based on
