@@ -1,5 +1,6 @@
 import numpy as np
 import time
+from scipy.ndimage.morphology import distance_transform_edt
 import lion.utils.ksp as ut_ksp
 import logging
 
@@ -11,8 +12,8 @@ class KSP:
     def __init__(self, graph):
         self.graph = graph
         try:
-            test = self.graph.dists_ba.shape
-            test = self.graph.preds_ba.shape
+            test = self.graph.dists_ba.shape  # noqa
+            test = self.graph.preds_ba.shape  # noqa
         except AttributeError:
             raise RuntimeError(
                 "Cannot initialize KSP object with a graph without"
@@ -62,17 +63,21 @@ class KSP:
         """
         tic = time.time()
         best_paths = [self.graph.best_path]
+
+        # get Eppstein distances
         (min_node_dists, min_shift_dists) = self.compute_min_node_dists()
+
+        # make auxiliary array for distance transform
+        aux_arr = np.ones(min_node_dists.shape)
+        for (x, y) in best_paths[0]:
+            aux_arr[x, y] = 0
 
         _, arr_len = min_node_dists.shape
         for _ in range(k - 1):
-            # compute the distances of the current paths to all vertices
-            # tic_corr = time.time()
-            path_points = np.array([p for path in best_paths
-                                    for p in path]).astype(int)
-            corridor = ut_ksp.fast_dilation(
-                path_points, min_node_dists.shape, iters=thresh
-            )
+            # use distance transform to compute the distances to the paths
+            distance_transform = distance_transform_edt(aux_arr)
+            corridor = thresh - distance_transform
+            corridor[corridor < 0] = 0
 
             # add penalty (or inf to exclude regions)
             corridor[corridor > 0
@@ -92,6 +97,8 @@ class KSP:
                 self.graph.start_inds, self.graph.dest_inds, x1, [x2, x3]
             )
             best_paths.append(vertices_path)
+            for (x, y) in vertices_path:
+                aux_arr[x, y] = 0
 
         self.graph.time_logs["ksp"] = round(time.time() - tic, 3)
         logger.debug(f"compute KSP time: {self.graph.time_logs['ksp']}")
@@ -105,10 +112,12 @@ class KSP:
             self.graph.start_inds, self.graph.dest_inds: vertices -->
             list with two entries
             k: int: number of paths to output
-            max_intersection: ratio of vertices that are allowed to be 
+            max_intersection: ratio of vertices that are allowed to be
             contained in the previously computed SPs
         """
-        assert 0 <= thresh <= 1, "threshold for min_set_intersection algorithm must be between 0 and 1"
+        assert 0 <= thresh <= 1, "threshold for min_set_intersection\
+             must be between 0 and 1"
+
         tic = time.time()
 
         best_paths = [np.array(self.graph.best_path)]

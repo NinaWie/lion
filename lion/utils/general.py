@@ -2,6 +2,7 @@ import numpy as np
 from numba import jit
 import logging
 import lion.utils.ksp as ut_ksp
+from scipy.ndimage.morphology import distance_transform_edt
 
 logger = logging.getLogger(__name__)
 
@@ -184,19 +185,22 @@ def compute_angle_cost(ang, max_angle_lg, mode="linear"):
             return 1
         else:
             return np.inf
+    elif mode == "squared":
+        return (ang / max_angle_lg)**2
     else:
         raise NotImplementedError
 
 
-def angle_360(vec1, vec2):
-    vec1 = np.asarray(vec1)
-    vec2 = np.asarray(vec2)
-    # normalize
-    v1 = vec1 / np.linalg.norm(vec1)
-    v2 = vec2 / np.linalg.norm(vec2)
+def angle_360(vec1, vec2, normalize=True):
+    if normalize:
+        vec1 = np.asarray(vec1)
+        vec2 = np.asarray(vec2)
+        # normalize
+        vec1 = vec1 / np.linalg.norm(vec1)
+        vec2 = vec2 / np.linalg.norm(vec2)
     # dot product and determinant
-    x1, y1 = v1
-    x2, y2 = v2
+    x1, y1 = vec1
+    x2, y2 = vec2
     dot = x1 * x2 + y1 * y2  # dot product
     det = x1 * y2 - y1 * x2  # determinant
     angle = np.arctan2(det, dot)
@@ -277,22 +281,36 @@ def pipeline_corridor(paths, out_shape, n_shifts, mem_limit, next_factor):
         mem_limit: Int, Maximum number of edges
         next_factor: Int, downsampling factor in the upcoming next iteration
     """
-    # extend with bresenham line because otherwise gaps between the points
-    path_line = []
+    # close gap between points on path with bresenham line
+    distance_transform = np.ones(out_shape)
     for path_points in paths:
         for i in range(len(path_points) - 1):
             line = bresenham_line(*path_points[i], *path_points[i + 1])
-            path_line.extend(line)
-    path_line = np.asarray(path_line)
-    # check how many pixels you get with 20 dilations
-    corridor = ut_ksp.fast_dilation(path_line, out_shape, iters=20)
-    # estimated new number of edges: nr pixels times nr neighbors
-    # divided by resolution by the power of 4
-    estimated_edges_10 = (np.sum(corridor > 0) * n_shifts) / (next_factor**4)
-    # take 20 times the factor dilations (but set to at least 10)
-    now_dist = max([(20 * mem_limit) / estimated_edges_10, 10])
-    logger.info(f"Next corridor around path was set to width {now_dist}")
-    corridor = ut_ksp.fast_dilation(path_line, out_shape, iters=int(now_dist))
+            for (x, y) in line:
+                distance_transform[x, y] = 0
+    # compute distance transform
+    # distance_transform[x,y] = min distance of cell (x,y) to the path(s)
+    distance_transform = distance_transform_edt(distance_transform)
+    # check how many pixels you get when setting the corridor to all cells with
+    # distance less than 20 (in order to test how many cells you get then)
+    test_corridor_width = 20
+    test_corridor = (distance_transform < test_corridor_width).astype(int)
+    # Estimate the number of edges that one will get with the 20-cell corridor:
+    # #edges = #pixels_in_corridor x #neighbors / factor**4 because a lower
+    # resolution reduces #pixels quadratically and #neighbors quadtratically
+    estimated_edges_20 = (np.sum(test_corridor) * n_shifts) / (next_factor**4)
+    # (mem_limit / estimated_edges_20) is then the factor how much more or less
+    # cells we can include in the corridor. E.g. With 20 we get 100 edges, but
+    # mem_limit = 1000 --> we can use 200 instead of 20 as the corridor width
+    # (but must be at least 10)
+    optimal_corridor_width = max(
+        [test_corridor_width * mem_limit / estimated_edges_20, 10]
+    )
+    # get the corridor with all cells closer than optimal_corridor_width
+    corridor = (distance_transform < optimal_corridor_width).astype(int)
+    logger.info(
+        f"Next corridor around path was set to width {optimal_corridor_width}"
+    )
     return corridor
 
 

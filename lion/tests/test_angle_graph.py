@@ -46,9 +46,8 @@ class TestImplicitLG(unittest.TestCase):
         graph = AngleGraph(self.example_inst, self.working_expl_corr)
         path = graph.single_sp(**vars(self.cfg))
         path, path_costs, cost_sum = graph.transform_path(path)
-        self.assertListEqual(graph.cost_weights.tolist(), [0.25, 0.75])
         self.assertTupleEqual(graph.instance.shape, self.expl_shape)
-        self.assertEqual(np.sum(graph.cost_weights), 1)
+        self.assertEqual(graph.angle_weight + graph.resistance_weight, 1)
         self.assertNotEqual(len(graph.shifts), 0)
         # all initialized to infinity
         # self.assertTrue(not np.any([graph.dists[graph.dists < np.inf]]))
@@ -85,7 +84,7 @@ class TestImplicitLG(unittest.TestCase):
                 path[p, 0], path[p, 1], path[p + 1, 0], path[p + 1, 1]
             )[1:-1]
             line_costs = [weighted_inst[i, j] for (i, j) in line]
-            line_costs = [l for l in line_costs if l < np.inf]
+            line_costs = [li for li in line_costs if li < np.inf]
             bresenham_edge_dist = np.mean(line_costs) * self.cfg.edge_weight
             shift_costs = np.linalg.norm(path[p] - path[p + 1])
             # append edge cost

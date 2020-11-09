@@ -1,10 +1,9 @@
 import lion.utils.general as ut
 import lion.utils.costs as ut_cost
 import lion.utils.ksp as ut_ksp
-
+from lion.utils.shortest_path import get_update_algorithm
 from lion.fast_shortest_path import (
-    sp_dag, sp_dag_reversed, topological_sort_jit, edge_costs,
-    efficient_update_sp
+    sp_dag, sp_dag_reversed, topological_sort_jit, edge_costs
 )
 import logging
 import numpy as np
@@ -126,8 +125,6 @@ class AngleGraph():
 
     def set_edge_costs(
         self,
-        layer_classes=["resistance"],
-        class_weights=[1],
         angle_weight=0,
         max_angle_lg=np.pi,
         angle_cost_function='linear',
@@ -150,36 +147,31 @@ class AngleGraph():
                         Function defines the cost per angle, implemented in
                         utils/general.py (function compute_angle_cost)
         """
-        tic = time.time()
-        assert len(layer_classes) == len(
-            class_weights
-        ), f"classes ({len(layer_classes)}) and\
-            weights({len(class_weights)}) must be of same length!"
-
         assert 0 <= angle_weight <= 1, "angle weight must be between 0 and 1"
-        # set classes
-        self.cost_classes = ["angle"] + list(layer_classes)
-        # set weights and add angle weight
-        self.cost_weights = np.array(
-            [angle_weight] +
-            list(np.asarray(class_weights) * (1 - angle_weight))
-        )
-        self.cost_weights = self.cost_weights / np.sum(self.cost_weights)
-        logger.debug(f"weights: {self.cost_weights}")
 
-        # set angle weight and already multiply with angles
-        self.angle_weight = self.cost_weights[0]
+        # set weights and add angle weight
+        self.resistance_weight = (1 - angle_weight)
+        # set angle weight
+        self.angle_weight = angle_weight
+
         # in precomute angles, it is multiplied with angle weights
         self.angle_cost_array = self._precompute_angles(
             max_angle_lg, angle_cost_function
         )
+        # multiply with angle weights, need to prevent that not inf * 0
+        non_inf = self.angle_cost_array < np.inf
+        self.angle_cost_array[
+            non_inf] = self.angle_cost_array[non_inf] * self.angle_weight
+
+        # multiply resistances with other corresponding weight
+        non_inf = self.instance < np.inf
+        self.instance[non_inf
+                      ] = self.instance[non_inf] * self.resistance_weight
 
         # If it is not allowed to traverse forbidden areas with a cable,
         # transform edge instance accordingly
         if not cable_allowed:
             self.edge_inst[self.instance == np.inf] = np.inf
-
-        self.time_logs["add_all_edges"] = round(time.time() - tic, 3)
 
     def _precompute_angles(self, max_angle_lg, angle_cost_function):
         """
@@ -223,15 +215,12 @@ class AngleGraph():
         angles_all[angles_all > 1] = np.inf
 
         self.time_logs["compute_angles"] = round(time.time() - tic, 3)
-        # multiply with angle weights, need to prevent that not inf * 0
-        angles_all[angles_all < np.inf
-                   ] = angles_all[angles_all < np.inf] * self.angle_weight
         return angles_all
 
     # --------------------------------------------------------------------
     # SHORTEST PATH COMPUTATION
 
-    def add_edges(self, edge_weight=0.2, **kwargs):
+    def build_source_sp_tree(self, edge_weight=0.2, **kwargs):
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
         if np.any(shift_norms == 1):
@@ -249,15 +238,17 @@ class AngleGraph():
         )
         logger.debug(f"Computed edge costs in {time.time() - tic}")
         tic = time.time()
+        # prepare for discrete if it is a discrete angle cost function:
+        self.algorithm, self.args = get_update_algorithm(
+            self.angle_cost_function, self.angle_cost_array, self.shifts
+        )
+
         # RUN - either directed acyclic or BF algorithm
         if self.is_dag:
-            if self.angle_cost_function == "linear" and len(self.shifts) > 100:
-                algorithm = efficient_update_sp
-            else:
-                algorithm = sp_dag
-            self.dists, self.preds = algorithm(
+            self.dists, self.preds = sp_dag(
                 self.stack_array, self.pos2node, np.array(self.shifts),
-                self.angle_cost_array, self.dists, self.preds, self.edge_cost
+                self.angle_cost_array, self.dists, self.preds, self.edge_cost,
+                self.algorithm, self.args
             )
         else:
             raise NotImplementedError(
@@ -269,9 +260,9 @@ class AngleGraph():
         logger.debug(f"time single SP: {round(time.time() - tic, 3)}")
 
     # ----------------------------------------------------------------------
-    # SHORTEST PATH TREE
+    # REVERSED TREE FOR KSP
 
-    def get_shortest_path_tree(self, source, target):
+    def build_dest_sp_tree(self, source, target):
         """
         Compute costs from dest to all edges
         """
@@ -289,7 +280,7 @@ class AngleGraph():
         self.dists_ba, self.preds_ba = sp_dag_reversed(
             self.stack_array, self.pos2node,
             np.array(self.shifts) * (-1), self.angle_cost_array, self.dists_ba,
-            self.edge_cost
+            self.edge_cost, self.algorithm, self.args
         )
         self.time_logs["shortest_path_tree"] = round(time.time() - tic, 3)
         logger.debug(f"done shortest_path_tree:{round(time.time() - tic, 3)}")
@@ -358,7 +349,7 @@ class AngleGraph():
     # Functions to output path (backtrack) and corresponding costs
 
     def transform_path(self, path):
-        raw_resistances = np.array([[self.instance[p[0], p[1]]] for p in path])
+        # raw_resist = np.array([[self.instance[p[0], p[1]]] for p in path])
 
         # compute angle costs
         ang_costs = ut_cost.compute_angle_costs(
@@ -488,7 +479,7 @@ class AngleGraph():
         self.add_nodes()
         logger.debug("2) Initialize distances to inf and predecessors")
         # MAIN ALGORITHM
-        self.add_edges(**kwargs)
+        self.build_source_sp_tree(**kwargs)
         logger.debug("3) Compute source shortest path tree")
         logger.debug(
             f"number of vertices: {self.n_nodes} and edges: {self.n_edges}"
@@ -507,5 +498,5 @@ class AngleGraph():
         # Build shortest path tree rooted in source
         path = self.single_sp(**kwargs)
         # Build shortest path tree rooted in target
-        self.get_shortest_path_tree(self.start_inds, self.dest_inds)
+        self.build_dest_sp_tree(self.start_inds, self.dest_inds)
         return path
