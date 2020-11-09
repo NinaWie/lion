@@ -1,66 +1,40 @@
 import lion.utils.general as ut
 import lion.utils.costs as ut_cost
 import lion.utils.ksp as ut_ksp
-
+from lion.utils.shortest_path import get_update_algorithm
 from lion.fast_shortest_path import (
-    sp_dag,
-    sp_dag_reversed,
-    topological_sort_jit,
-    del_after_dest,
-    edge_costs,
-    sp_bf  # , efficient_update_sp
+    sp_dag, sp_dag_reversed, topological_sort_jit, edge_costs
 )
-import warnings
+import logging
 import numpy as np
 import time
 import pickle
 from numba.typed import List
 
+logger = logging.getLogger(__name__)
+
 
 class AngleGraph():
 
     def __init__(
-        self,
-        instance,
-        instance_corr,
-        edge_instance=None,
-        directed=True,
-        verbose=1,
-        n_iters=50
+        self, instance, instance_corr, edge_instance=None, directed=True
     ):
-        self.cost_instance = instance
-        self.hard_constraints = instance_corr
+
+        # initialiye edge instance
+        self.instance = instance.copy()
+        assert np.all(
+            self.instance < np.inf
+        ), "No infs allowed in instance input to AngleGraph"
+        # construct instance with infs where hard constraints are:
+        self.instance[np.where(instance_corr == 0)] = np.inf
+
         if edge_instance is None:
-            self.edge_cost_instance = instance.copy()
+            self.edge_inst = instance
         else:
-            self.edge_cost_instance = edge_instance
+            self.edge_inst = edge_instance
         self.x_len, self.y_len = instance_corr.shape
-        self.n_iters = n_iters
         self.time_logs = {}
-        self.verbose = verbose
         self.directed = directed
-
-        # construct cost rest
-        inf_corr = np.absolute(1 - self.hard_constraints).astype(float)
-        inf_corr[inf_corr > 0] = np.inf
-        self.cost_rest = self.cost_instance + inf_corr
-
-    def _precompute_angles(self):
-        tic = time.time()
-        angles_all = np.zeros((len(self.shifts), len(self.shifts)))
-        angles_all += np.inf
-        for i in range(len(self.shifts)):
-            for j, s in enumerate(self.shifts):
-                ang = ut.angle(s, self.shifts[i])
-                if ang <= self.angle_norm_factor:
-                    angles_all[i, j] = ut.discrete_angle_costs(
-                        ang, self.angle_norm_factor
-                    )
-        self.time_logs["compute_angles"] = round(time.time() - tic, 3)
-        # multiply with angle weights, need to prevent that not inf * 0
-        angles_all[angles_all < np.inf
-                   ] = angles_all[angles_all < np.inf] * self.angle_weight
-        return angles_all
 
     def set_shift(
         self,
@@ -69,18 +43,18 @@ class AngleGraph():
         pylon_dist_min=3,
         pylon_dist_max=5,
         max_angle=np.pi / 2,
-        max_angle_lg=np.pi / 2,
         **kwargs
     ):
         """
         Initialize shift variable by getting the donut values
-        :param pylon_dist_min, pylon_dist_max: min and max distance of pylons
-        :param vec: vector of diretion of edges
-        :param max_angle: Maximum angle of edges to vec
+
+        Arguments:
+            start, dest: list containing X and Y coordinate of source / dest
+            pylon_dist_min, pylon_dist_max: min and max distance of pylons
+            max_angle: Maximum angle of edges to vec
         """
         self.start_inds = np.asarray(start)
         self.dest_inds = np.asarray(dest)
-        self.angle_norm_factor = max_angle_lg
         vec = self.dest_inds - self.start_inds
         shifts = ut.get_half_donut(
             pylon_dist_min, pylon_dist_max, vec, angle_max=max_angle
@@ -89,6 +63,9 @@ class AngleGraph():
         # sort the shifts
         self.shifts = np.asarray(shifts)[np.argsort(shift_angles)]
         self.shift_tuples = self.shifts
+
+        # determine whether the graph is directed acyclic
+        self.is_dag = max_angle <= np.pi / 2
 
         # construct bresenham lines
         shift_lines = List()
@@ -101,6 +78,9 @@ class AngleGraph():
         self.shift_costs = np.array([np.linalg.norm(s) for s in self.shifts])
 
     def add_nodes(self):
+        """
+        Initialize distances and predecessors, sort vertices topologically
+        """
         tic = time.time()
         # SORT --> Make stack
         visit_points = (self.instance < np.inf).astype(int)
@@ -120,12 +100,8 @@ class AngleGraph():
             np.all(self.stack_array == self.start_inds, axis=1)
         )[0][0]
         self.stack_array = (self.stack_array[start_point:]).astype(int)
-        if self.verbose:
-            print("time stack construction sort:", round(time.time() - tic, 3))
-            print(
-                "stack", len(self.stack_array), self.stack_array[0],
-                self.stack_array[-1]
-            )
+        logger.info(f"constructed stack in : {round(time.time() - tic, 3)}")
+        logger.debug(f"number of vertices in stack: {len(self.stack_array)}")
 
         # build pos2node
         self.pos2node = (
@@ -145,112 +121,110 @@ class AngleGraph():
         self.n_pixels = self.x_len * self.y_len
         self.n_nodes = len(self.stack_array)
         self.n_edges = len(self.shifts) * len(self.dists)
-        if self.verbose:
-            print("memory taken (dists shape):", self.n_edges)
-
-    def set_corridor(
-        self, corridor, start_inds, dest_inds, sample_func="mean",
-        sample_method="simple", factor_or_n_edges=1
-    ):  # yapf: disable
-        # assert factor_or_n_edges == 1, "pipeline not implemented yet"
-        corridor = (corridor > 0).astype(int) * (self.hard_constraints >
-                                                 0).astype(int)
-        inf_corr = np.absolute(1 - corridor).astype(float)
-        inf_corr[inf_corr > 0] = np.inf
-
-        self.factor = factor_or_n_edges
-        self.cost_rest = self.cost_instance + inf_corr
-        # downsample
-        tic = time.time()
-        if self.factor > 1:
-            self.cost_rest = ut_cost.inf_downsample(
-                self.cost_rest, self.factor
-            )
-
-        self.time_logs["downsample"] = round(time.time() - tic, 3)
-
-        # repeat because edge artifacts
-        self.cost_rest = self.cost_rest + inf_corr
-
-        # add start and end TODO ugly
-        self.cost_rest[:, dest_inds[0],
-                       dest_inds[1]] = self.cost_instance[:, dest_inds[0],
-                                                          dest_inds[1]]
-        self.cost_rest[:, start_inds[0],
-                       start_inds[1]] = self.cost_instance[:, start_inds[0],
-                                                           start_inds[1]]
-
-        self.start_inds = start_inds
-        self.dest_inds = dest_inds
+        logger.info(f"Graph size (number of edges): {self.n_edges}")
 
     def set_edge_costs(
         self,
-        layer_classes=["resistance"],
-        class_weights=[1],
         angle_weight=0,
+        max_angle_lg=np.pi,
+        angle_cost_function='linear',
+        cable_allowed=True,
         **kwargs
     ):
         """
-        angle_weight: how to consider angles in contrast to all other costs!
-        """
-        tic = time.time()
-        assert len(layer_classes) == len(
-            class_weights
-        ), f"classes ({len(layer_classes)}) and\
-            weights({len(class_weights)}) must be of same length!"
+        Define the resistances / costs to represent on graph edges
+        (Combines class-wise resistances and angle weights)
 
-        assert len(layer_classes) == len(
-            self.cost_rest
-        ), f"classes ({len(layer_classes)}) and\
-            instance layers ({len(self.cost_rest)}) must be of same length!"
+        Arguments:
+            layer_classes: List of strings, names of cost categories
+            class_weights: List of same length as layer_classes, corresponding
+                weights (normalized automatically, can be any positive number)
+            angle_weight: Importance of angle costs compared to resistances
+                (=0 means only resistance is optimized, =1 means only angles
+                are minimized, i.e. output will be straightest line possible)
+            max_angle_lg: maximum angle between a adjacent edges on the path
+            angle_cost_function: Currently implemented "linear" and "discrete"
+                        Function defines the cost per angle, implemented in
+                        utils/general.py (function compute_angle_cost)
+        """
+        assert 0 <= angle_weight <= 1, "angle weight must be between 0 and 1"
 
         # set weights and add angle weight
-        self.cost_classes = ["angle"] + list(layer_classes)
-        ang_weight_norm = angle_weight * np.sum(class_weights)
-        self.cost_weights = np.array([ang_weight_norm] + list(class_weights))
-        # print("class weights", class_weights)
-        self.cost_weights = self.cost_weights / np.sum(self.cost_weights)
-        if self.verbose:
-            print("cost weights", self.cost_weights)
+        self.resistance_weight = (1 - angle_weight)
+        # set angle weight
+        self.angle_weight = angle_weight
 
-        # set angle weight and already multiply with angles
-        self.angle_weight = self.cost_weights[0]
         # in precomute angles, it is multiplied with angle weights
-        self.angle_cost_array = self._precompute_angles()
-
-        # define instance by weighted sum
-        self.instance = np.sum(
-            np.moveaxis(self.cost_rest, 0, -1) * self.cost_weights[1:], axis=2
+        self.angle_cost_array = self._precompute_angles(
+            max_angle_lg, angle_cost_function
         )
-        # if one weight is zero, have to correct 0*inf errors
-        if np.any(np.isnan(self.instance)):
-            self.instance[np.isnan(self.instance)] = np.inf
+        # multiply with angle weights, need to prevent that not inf * 0
+        non_inf = self.angle_cost_array < np.inf
+        self.angle_cost_array[
+            non_inf] = self.angle_cost_array[non_inf] * self.angle_weight
 
-        self.edge_inst = np.sum(
-            np.moveaxis(self.edge_cost_instance, 0, -1) *
-            self.cost_weights[1:],
-            axis=2
+        # multiply resistances with other corresponding weight
+        non_inf = self.instance < np.inf
+        self.instance[non_inf
+                      ] = self.instance[non_inf] * self.resistance_weight
+
+        # If it is not allowed to traverse forbidden areas with a cable,
+        # transform edge instance accordingly
+        if not cable_allowed:
+            self.edge_inst[self.instance == np.inf] = np.inf
+
+    def _precompute_angles(self, max_angle_lg, angle_cost_function):
+        """
+        Helper function to precompute the angle costs for all tuples of edges
+        Arguments:
+            max_angle_lg: maximum feasible angle
+            angle_cost_function: funct to compute cost dependent on the angle
+                        currently implemented: linear and one discrete option
+        """
+        self.angle_cost_function = angle_cost_function
+        tic = time.time()
+
+        # normalize (otherwise need to normalize in quadratic loop)
+        shift_arrs = [np.asarray(s) for s in self.shifts]
+        norm_shifts = [s / np.linalg.norm(s) for s in shift_arrs]
+        # compute raw angle values
+        angles_raw = np.array(
+            [
+                [ut.angle(s2, s1, normalize=False) for s1 in norm_shifts]
+                for s2 in norm_shifts
+            ]
         )
-        # dirty_extend = self.edge_inst.copy()
-        # x_len, y_len = self.edge_inst.shape
-        # for i in range(1, x_len - 1):
-        #     for j in range(1, y_len - 1):
-        #         if np.any(self.edge_inst[i - 1:i + 2, j - 1:j + 2]
-        # == np.inf):
-        #             dirty_extend[i, j] = np.inf
-        # self.edge_inst = dirty_extend
-        self.time_logs["add_all_edges"] = round(time.time() - tic, 3)
-        if self.verbose:
-            print("instance shape", self.instance.shape)
+        # compute feasible maximum value
+        max_angle = np.max(angles_raw[angles_raw <= max_angle_lg])
+        self.angle_norm_factor = max_angle
+
+        # compute angle costs (and normalize)
+        slen = len(self.shifts)
+        angles_all = np.array(
+            [
+                [
+                    ut.compute_angle_cost(
+                        angles_raw[i, j],
+                        self.angle_norm_factor,
+                        mode=self.angle_cost_function
+                    ) for i in range(slen)
+                ] for j in range(slen)
+            ]
+        )
+        # greater than 1 (normalized) means infeasible angle
+        angles_all[angles_all > 1] = np.inf
+
+        self.time_logs["compute_angles"] = round(time.time() - tic, 3)
+        return angles_all
 
     # --------------------------------------------------------------------
     # SHORTEST PATH COMPUTATION
 
-    def add_edges(self, mode="DAG", iters=100, edge_weight=0, **kwargs):
+    def build_source_sp_tree(self, edge_weight=0.2, **kwargs):
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
         if np.any(shift_norms == 1):
-            # warnings.warn("Raster approach, EDGE WEIGHT IS SET TO ZERO")
+            logger.warning("raster approach - edge weight set to zero")
             self.edge_weight = 0
 
         shift_norms = [np.linalg.norm(s) for s in self.shifts]
@@ -262,33 +236,33 @@ class AngleGraph():
             self.edge_cost, self.instance, self.edge_inst, self.shift_lines,
             self.shift_costs, self.edge_weight
         )
-        if self.verbose:
-            print("Computed edge instance", time.time() - tic)
+        logger.debug(f"Computed edge costs in {time.time() - tic}")
         tic = time.time()
+        # prepare for discrete if it is a discrete angle cost function:
+        self.algorithm, self.args = get_update_algorithm(
+            self.angle_cost_function, self.angle_cost_array, self.shifts
+        )
+
         # RUN - either directed acyclic or BF algorithm
-        if mode == "BF":
-            # TODO: nr iterations argument
-            self.dists, self.preds = sp_bf(
-                iters, self.stack_array, np.array(self.shifts),
-                self.angle_cost_array, self.dists, self.preds, self.instance,
-                self.edge_cost
-            )
-        elif mode == "DAG":
+        if self.is_dag:
             self.dists, self.preds = sp_dag(
                 self.stack_array, self.pos2node, np.array(self.shifts),
-                self.angle_cost_array, self.dists, self.preds, self.edge_cost
+                self.angle_cost_array, self.dists, self.preds, self.edge_cost,
+                self.algorithm, self.args
             )
         else:
-            raise ValueError("wrong mode input: " + mode)
+            raise NotImplementedError(
+                "Angle shortest path not implemented for cyclic graph.\
+                    Please set max_angle <= np.pi / 2 in config"
+            )
 
         self.time_logs["shortest_path"] = round(time.time() - tic, 3)
-        if self.verbose:
-            print("time edges:", round(time.time() - tic, 3))
+        logger.debug(f"time single SP: {round(time.time() - tic, 3)}")
 
     # ----------------------------------------------------------------------
-    # SHORTEST PATH TREE
+    # REVERSED TREE FOR KSP
 
-    def get_shortest_path_tree(self, source, target):
+    def build_dest_sp_tree(self, source, target):
         """
         Compute costs from dest to all edges
         """
@@ -306,11 +280,10 @@ class AngleGraph():
         self.dists_ba, self.preds_ba = sp_dag_reversed(
             self.stack_array, self.pos2node,
             np.array(self.shifts) * (-1), self.angle_cost_array, self.dists_ba,
-            self.edge_cost
+            self.edge_cost, self.algorithm, self.args
         )
         self.time_logs["shortest_path_tree"] = round(time.time() - tic, 3)
-        if self.verbose:
-            print("time shortest_path_tree:", round(time.time() - tic, 3))
+        logger.debug(f"done shortest_path_tree:{round(time.time() - tic, 3)}")
         # from lion.utils.plotting import angle_graph_display_dists
         # self.angle_graph_display_dists(self.dists_ba)
         # distance in ba: take IN edges to source, by computing in neighbors
@@ -376,32 +349,25 @@ class AngleGraph():
     # Functions to output path (backtrack) and corresponding costs
 
     def transform_path(self, path):
-        path_costs = np.array(
-            [self.cost_instance[:, p[0], p[1]] for p in path]
+        # raw_resist = np.array([[self.instance[p[0], p[1]]] for p in path])
+
+        # compute angle costs
+        ang_costs = ut_cost.compute_angle_costs(
+            path, self.angle_norm_factor, mode=self.angle_cost_function
         )
-        # include angle costs
-        ang_costs = ut_cost.compute_angle_costs(path, self.angle_norm_factor)
-        # prevent that inf * 0 if zero edge weight
-        edge_costs = 0
-        if self.edge_weight != 0:
-            edge_costs = ut_cost.compute_edge_costs(path, self.edge_inst)
-        # print("unweighted edge costs", np.sum(edge_costs))
-        path_costs = np.concatenate(
-            (np.swapaxes(np.array([ang_costs]), 1, 0), path_costs), axis=1
+
+        # compute the geometric path costs
+        path_costs = ut_cost.compute_geometric_costs(
+            path, self.instance, self.edge_weight
         )
-        cost_sum = np.dot(
-            self.cost_weights, np.sum(np.array(path_costs), axis=0)
-        ) + np.sum(edge_costs) * self.edge_weight
-        # cost_sum = np.dot(
-        #     self.class_weights, np.sum(np.array(path_costs), axis=0)
-        # )  # scalar: weighted sum of the summed class costs
-        return np.asarray(path
-                          ).tolist(), path_costs.tolist(), cost_sum.tolist()
+        # combine costs
+        cost_sum = np.sum(path_costs) + self.angle_weight * np.sum(ang_costs)
+        return np.asarray(path).tolist(), np.array(path_costs), cost_sum
 
     def get_shortest_path(self, start_inds, dest_inds, ret_only_path=False):
         dest_ind_stack = self.pos2node[tuple(dest_inds)]
         if not np.any(self.dists[dest_ind_stack, :] < np.inf):
-            warnings.warn("empty path")
+            logger.warning("WARNING: Empty path!")
             return [], [], 0
         tic = time.time()
         curr_point = dest_inds
@@ -425,7 +391,7 @@ class AngleGraph():
             return path
         self.sp = path
         self.time_logs["path"] = round(time.time() - tic, 3)
-        return self.transform_path(path)
+        return path.tolist()
 
     # ----------------------------------------------------------------------
     # Other auxiliary functions
@@ -471,15 +437,21 @@ class AngleGraph():
                 or float(self.dest_inds[i]).is_integer() for i in range(2)
             ]
         ), "dest inds must be integer!"
+        assert self.instance[tuple(
+            self.start_inds
+        )] < np.inf, "Problem: Start coordinates are not in project region"
+        assert self.instance[tuple(
+            self.dest_inds
+        )] < np.inf, "Problem: Target coordinates are not in project region"
         self.start_inds = np.asarray(self.start_inds).astype(int)
         self.dest_inds = np.asarray(self.dest_inds).astype(int)
 
-        instance_shape = np.asarray(self.hard_constraints.shape)
+        instance_shape = np.asarray(self.instance.shape)
         assert np.all(np.asarray(self.start_inds) < instance_shape) and np.all(
             np.asarray(self.dest_inds) < instance_shape
         ), "start or dest not in project region!"
 
-    def single_sp(self, power=1, **kwargs):
+    def single_sp(self, **kwargs):
         """
         Function for full processing to yield shortest path
         Necessary parameters:
@@ -488,7 +460,9 @@ class AngleGraph():
         Optional parameters:
             pylon_dist_min: min cell distance of neighboring pylons (default 3)
             pylon_dist_max: min cell distance of neighboring pylons (default 5)
-            angle_weight: how important is the angle (default 0)
+            angle_weight: Importance of angle costs compared to resistances
+                (=0 means only resistance is optimized, =1 means only angles
+                are minimized, i.e. output will be straightest line possible)
             edge_weight: importance of cable costs vs pylon costs (default 0)
             max_angle: maximum deviation in angle from the straight connection
                        from start to end (default: pi/2)
@@ -499,34 +473,30 @@ class AngleGraph():
 
         # initialize donut ring and edge costs
         self.set_shift(self.start_inds, self.dest_inds, **kwargs)
-        if self.verbose:
-            print("1) Initialize shifts and instance (corridor)")
+        logger.debug("1) Initialize shifts and instance (corridor)")
         self.set_edge_costs(**kwargs)
-        self.instance = self.instance**power
         # add vertices
         self.add_nodes()
-        if self.verbose:
-            print("2) Initialize distances to inf and predecessors")
+        logger.debug("2) Initialize distances to inf and predecessors")
         # MAIN ALGORITHM
-        self.add_edges(**kwargs)
-        if self.verbose:
-            print("3) Compute source shortest path tree")
-            print("number of vertices and edges:", self.n_nodes, self.n_edges)
+        self.build_source_sp_tree(**kwargs)
+        logger.debug("3) Compute source shortest path tree")
+        logger.debug(
+            f"number of vertices: {self.n_nodes} and edges: {self.n_edges}"
+        )
 
         # get actual best path
-        path, path_costs, cost_sum = self.get_shortest_path(
-            self.start_inds, self.dest_inds
-        )
-        if self.verbose:
-            print("4) shortest path", cost_sum)
-        return path, path_costs, cost_sum
+        path = self.get_shortest_path(self.start_inds, self.dest_inds)
+        logger.debug("4) shortest path computed")
+        return path
 
     def sp_trees(self, **kwargs):
-        # assert that start and dest exist in kwargs and are in project region
-        self._check_start_dest(**kwargs)
-
-        start_inds = kwargs["start_inds"]
-        dest_inds = kwargs["dest_inds"]
-        path, path_costs, cost_sum = self.single_sp(**kwargs)
-        self.get_shortest_path_tree(start_inds, dest_inds)
-        return path, path_costs, cost_sum
+        """
+        Compute shortest path trees from both directions (Eppstein distances)
+        necessary for finding multiple paths
+        """
+        # Build shortest path tree rooted in source
+        path = self.single_sp(**kwargs)
+        # Build shortest path tree rooted in target
+        self.build_dest_sp_tree(self.start_inds, self.dest_inds)
+        return path

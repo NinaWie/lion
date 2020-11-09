@@ -64,6 +64,13 @@ class TestAPI(unittest.TestCase):
             buffer=0,
             out_path="test_optimal_pylon_spotting.png"
         )
+        cfg = self.cfg.copy()
+        cfg["pipeline"] = [3, 1]
+        path_pipeline = optimal_pylon_spotting(
+            self.test_instance,
+            cfg,
+        )
+        self.assertListEqual(path, path_pipeline)
 
     def test_ksp_routes(self) -> None:
         paths = ksp_routes(self.test_instance, self.cfg.copy(), 5)
