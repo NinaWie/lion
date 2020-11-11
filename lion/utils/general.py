@@ -1,7 +1,6 @@
 import numpy as np
 from numba import jit
 import logging
-import lion.utils.ksp as ut_ksp
 from scipy.ndimage.morphology import distance_transform_edt
 
 logger = logging.getLogger(__name__)
