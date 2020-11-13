@@ -262,7 +262,7 @@ class AngleGraph():
     # ----------------------------------------------------------------------
     # REVERSED TREE FOR KSP
 
-    def build_dest_sp_tree(self, source, target):
+    def build_dest_sp_tree(self):
         """
         Compute costs from dest to all edges
         """
@@ -294,7 +294,6 @@ class AngleGraph():
             self.dists_ba[neigh_inds[s], s] if neigh_inds[s] >= 0 else np.inf
             for s, (i, j) in enumerate(self.shifts)
         ]
-        d_ba_arg = np.argmin(start_dests)
         d_ba = np.min(start_dests)
 
         d_ab = np.min(self.dists[self.pos2node[tuple(self.dest_inds)], :])
@@ -302,42 +301,19 @@ class AngleGraph():
             d_ba, d_ab
         ), "start to dest != dest to start " + str(d_ab) + " " + str(d_ba)
 
-        # compute best path
-        self.best_path = np.array(
-            ut_ksp.get_sp_dest_shift(
-                self.dists_ba,
-                self.preds_ba,
-                self.pos2node,
-                self.dest_inds,
-                self.start_inds,
-                np.array(self.shifts) * (-1),
-                d_ba_arg,
-                dest_edge=True
-            )
-        )
-        # assert np.all(self.best_path == np.array(self.sp)), "paths differ"
-
-    def _combined_paths(self, start, dest, best_shift, best_edge):
+    def _combined_paths(self, best_shift, best_edge):
         """
         Compute path through one specific edge (with bi-directed predecessors)
 
         Arguments:
-            start: overall source vertex
-            dest: overall target vertex
-            best_shift: the neighbor index of the edge
             best_edge: the vertex of the edge
+            best_shift: the neighbor index of the edge
         """
         # compute path from start to middle point - incoming edge
         best_edge = np.array(best_edge)
-        path_ac = ut_ksp.get_sp_start_shift(
-            self.dists, self.preds, self.pos2node, start, best_edge,
-            np.array(self.shifts), best_shift
-        )
+        path_ac = self.get_sp_start_shift(best_edge, best_shift)
         # compute path from middle point to dest - outgoing edge
-        path_cb = ut_ksp.get_sp_dest_shift(
-            self.dists_ba, self.preds_ba, self.pos2node, dest, best_edge,
-            np.array(self.shifts) * (-1), best_shift
-        )
+        path_cb = self.get_sp_dest_shift(best_edge, best_shift)
         # concatenate
         together = np.concatenate(
             (np.flip(np.array(path_ac), axis=0), np.array(path_cb)[1:]),
@@ -364,34 +340,71 @@ class AngleGraph():
         cost_sum = np.sum(path_costs) + self.angle_weight * np.sum(ang_costs)
         return np.asarray(path).tolist(), np.array(path_costs), cost_sum
 
-    def get_shortest_path(self, start_inds, dest_inds, ret_only_path=False):
-        dest_ind_stack = self.pos2node[tuple(dest_inds)]
+    def get_shortest_path(self):
+        dest_ind_stack = self.pos2node[tuple(self.dest_inds)]
         if not np.any(self.dists[dest_ind_stack, :] < np.inf):
             logger.warning("WARNING: Empty path!")
             return [], [], 0
         tic = time.time()
-        curr_point = dest_inds
-        path = [dest_inds]
-        # first minimum: angles don't matter, just min of in-edges
+
+        # backtrack from dest to start from predecessor maps
         min_shift = np.argmin(self.dists[dest_ind_stack, :])
-        # track back until start inds
-        while np.any(curr_point - start_inds):
-            new_point = curr_point - self.shifts[int(min_shift)]
-            # get new shift from argmins
-            curr_ind_stack = self.pos2node[tuple(curr_point)]
-            min_shift = self.preds[curr_ind_stack, int(min_shift)]
-            if min_shift == -1:
-                print(path)
-                raise RuntimeError("Problem! predecessor -1!")
-            path.append(new_point)
-            curr_point = new_point
+        path = self.get_sp_start_shift(self.dest_inds, min_shift)
 
         path = np.flip(np.asarray(path), axis=0)
-        if ret_only_path:
-            return path
-        self.sp = path
+        self.best_path = path
         self.time_logs["path"] = round(time.time() - tic, 3)
         return path.tolist()
+
+    def get_sp_start_shift(self, vertex_coords, min_shift):
+        """
+        Reconstruct paths from distance and predecessor map with REVERSED
+        edge directions
+        @param
+            vertex_coords: coordinates of current point
+            min_shift: optimal predecessor shift at target (to trace back)
+        @returns:
+            list of X, Y, Z coordinates
+        """
+        vertex_stack = self.pos2node[tuple(vertex_coords)]
+        if not np.any(self.dists[vertex_stack, :] < np.inf):
+            raise RuntimeWarning("empty path")
+        curr_point = np.asarray(vertex_coords)
+        my_path = [vertex_coords]
+        while np.any(curr_point - self.start_inds):
+            new_point = curr_point - self.shifts[int(min_shift)]
+            # get next shift
+            pred_ind = self.pos2node[tuple(curr_point)]
+            min_shift = self.preds[pred_ind, int(min_shift)]
+            my_path.append(new_point)
+            curr_point = new_point
+        return my_path
+
+    def get_sp_dest_shift(self, vertex_coords, min_shift, dest_edge=False):
+        """
+        Reconstruct paths from distance and predecessor map with REVERSED
+        edge directions
+        @param
+            vertex_coords: coordinates of current point
+            min_shift: optimal predecessor shift at target (to trace back)
+            dest_edge: Whether to use min_shift or not
+        @returns:
+            list of X, Y coordinates
+        """
+        if not dest_edge:
+            vertex_coords_ind = self.pos2node[tuple(vertex_coords)]
+            min_shift = self.preds_ba[vertex_coords_ind, int(min_shift)]
+        curr_point = np.asarray(vertex_coords)
+        my_path = [vertex_coords]
+        while np.any(curr_point - self.dest_inds):
+            # move on to next point
+            new_point = curr_point + self.shifts[int(min_shift)]
+            # get next shift
+            pred_ind = self.pos2node[tuple(new_point)]
+            min_shift = self.preds_ba[pred_ind, int(min_shift)]
+            my_path.append(new_point)
+            curr_point = new_point
+        return my_path
 
     # ----------------------------------------------------------------------
     # Other auxiliary functions
@@ -406,10 +419,6 @@ class AngleGraph():
         tmp_list_inner.append(0)
         tmp_list.append(tmp_list_inner)
         return tmp_list
-
-    def add_start_and_dest(self, source, dest):
-        # here simply return the indices for start and destination
-        return source, dest
 
     # -----------------------------------------------------------------------
     # INTERFACE
@@ -486,7 +495,7 @@ class AngleGraph():
         )
 
         # get actual best path
-        path = self.get_shortest_path(self.start_inds, self.dest_inds)
+        path = self.get_shortest_path()
         logger.debug("4) shortest path computed")
         return path
 
@@ -498,5 +507,5 @@ class AngleGraph():
         # Build shortest path tree rooted in source
         path = self.single_sp(**kwargs)
         # Build shortest path tree rooted in target
-        self.build_dest_sp_tree(self.start_inds, self.dest_inds)
+        self.build_dest_sp_tree()
         return path
