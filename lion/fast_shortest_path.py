@@ -41,7 +41,7 @@ def edge_costs(
     shift_costs, edge_weight
 ):
     """
-    Pre-compute all costs on each edge from pylon and cable resistances
+    Pre-compute all costs on each edge from point and cable resistances
 
     Arguments:
         stack: np array of shape (n,2): order in which to consider the vertices
@@ -50,7 +50,7 @@ def edge_costs(
         shifts: np array of size (x,2), indicating the neighborhood for each
             vertex
         edge_cost: 2Darray of size (n, len(shifts)), initially all inf
-        instance: 2Darray of pylon resistance values for each cell
+        instance: 2Darray of point resistance values for each cell
         edge_inst: 2Darray with resistances to traverse this cell with a cable
                    (often same as instance)
         shift_lines: numba typed List filled with len(shifts) np arrays,
@@ -59,7 +59,7 @@ def edge_costs(
         shift_costs: 1Darray of length len(shift) containing the Euclidean
                     length to each neighbor
         edge_weight: Weight defining importance of cable costs (=resistance to
-                    traverse cell with a cable) compared ot pylon costs
+                    traverse cell with a cable) compared ot point costs
     """
     edge_inst_len_x, edge_inst_len_y = edge_inst.shape
     # print(len(stack))
@@ -134,7 +134,7 @@ def sp_dag(
                 and pos2node[neigh_x, neigh_y] >= 0
             ):
                 neigh_stack_ind = pos2node[neigh_x, neigh_y]
-                # add up pylon cost + angle cost + edge cost
+                # add up point cost + angle cost + edge cost
                 pred = int(predecessors[s])
                 cost_and_angle = dists[i, pred] + angles_all[s, pred]
 

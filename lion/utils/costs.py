@@ -42,7 +42,7 @@ def compute_geometric_costs(path, instance, edge_weight=0):
         List of geometric edge costs along the path
     """
     path = np.array(path)
-    # compute the cable costs (bresenham line between pylons)
+    # compute the cable costs (bresenham line between points)
     edge_costs = np.zeros(len(path))
     if edge_weight != 0:
         edge_costs = compute_edge_costs(path, instance) * edge_weight

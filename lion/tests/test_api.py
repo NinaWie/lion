@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import matplotlib.pyplot as plt  # TODO
 from lion.algorithms import (
-    optimal_pylon_spotting, optimal_route, ksp_pylons, ksp_routes
+    optimal_point_spotting, optimal_route, ksp_points, ksp_routes
 )
 
 
@@ -50,8 +50,8 @@ class TestAPI(unittest.TestCase):
             out_path="test_optimal_route.png"
         )
 
-    def test_optimal_pylon_spotting(self) -> None:
-        path = optimal_pylon_spotting(
+    def test_optimal_point_spotting(self) -> None:
+        path = optimal_point_spotting(
             self.test_instance,
             self.cfg.copy(),
         )
@@ -62,11 +62,11 @@ class TestAPI(unittest.TestCase):
         plot_paths(
             self.test_instance, [path],
             buffer=0,
-            out_path="test_optimal_pylon_spotting.png"
+            out_path="test_optimal_point_spotting.png"
         )
         cfg = self.cfg.copy()
         cfg["pipeline"] = [3, 1]
-        path_pipeline = optimal_pylon_spotting(
+        path_pipeline = optimal_point_spotting(
             self.test_instance,
             cfg,
         )
@@ -77,10 +77,10 @@ class TestAPI(unittest.TestCase):
         self.assertTrue(len(paths) == 5)
         plot_paths(self.test_instance, paths, out_path="test_route_ksp.png")
 
-    def test_ksp_pylons(self) -> None:
-        paths = ksp_pylons(self.test_instance, self.cfg.copy(), 5)
+    def test_ksp_points(self) -> None:
+        paths = ksp_points(self.test_instance, self.cfg.copy(), 5)
         self.assertTrue(len(paths) == 5)
-        plot_paths(self.test_instance, paths, out_path="test_pylon_ksp.png")
+        plot_paths(self.test_instance, paths, out_path="test_point_ksp.png")
 
 
 if __name__ == '__main__':

@@ -23,8 +23,8 @@ class TestUpdateAlgs(unittest.TestCase):
     corridor[tuple(dest_inds)] = 1
     cfg["start_inds"] = start_inds
     cfg["dest_inds"] = dest_inds
-    cfg["pylon_dist_min"] = 10
-    cfg["pylon_dist_max"] = 15
+    cfg["point_dist_min"] = 10
+    cfg["point_dist_max"] = 15
     cfg["layer_classes"] = ["dummy_class"]
     cfg["class_weights"] = [1]
 
