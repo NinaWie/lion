@@ -17,7 +17,8 @@ cfg - configuration: Dict with the following neceassay and optional parameters
     - point_dist_min: minimum cell distance of neighboring points (default 3)
     - point_dist_max: minimum cell distance of neighboring points (default 5)
     - angle_weight: how important is the angle (default 0)
-    - edge_weight: importantance of cable costs compared to points (default 0)
+    - edge_weight: importantance of costs between points compared to points
+            themselves (default 0 --> only the cost at the points matters)
     - max_angle: maximum deviation in angle from the straight connection from
             start to end (default: pi/2)
     - max_angle_lg: maximum angle at a point (default: pi)
@@ -39,8 +40,8 @@ cfg - configuration: Dict with the following neceassay and optional parameters
             memory_limit) then downsample by factor of 1 (aka full resolution).
             There is no support for setting the corridor width manually because
             it does not make sense to make it smaller than it could be
-    - between_points_allowed: If True, then forbidden areas can still be traversed with
-            a cable (only placing a point is forbidden)
+    - between_points_allowed: If True, then forbidden areas can still be
+            traversed, i.e. two points can be placed around a forbidden area
             If False, then forbidden areas can not be traversed either
     - diversity_threshold:
         FOR KSP.ksp:

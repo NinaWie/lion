@@ -41,7 +41,8 @@ def edge_costs(
     shift_costs, edge_weight
 ):
     """
-    Pre-compute all costs on each edge from point and cable resistances
+    Pre-compute all costs on each edge from resistances at the points or if
+    edge_weight>0 then also including resistances between points
 
     Arguments:
         stack: np array of shape (n,2): order in which to consider the vertices
@@ -51,15 +52,15 @@ def edge_costs(
             vertex
         edge_cost: 2Darray of size (n, len(shifts)), initially all inf
         instance: 2Darray of point resistance values for each cell
-        edge_inst: 2Darray with resistances to traverse this cell with a cable
+        edge_inst: 2Darray with resistances to traverse this cell
                    (often same as instance)
         shift_lines: numba typed List filled with len(shifts) np arrays,
                     each array of shape (x,2) is the Bresenham line connecting
                     a cell to one of its neighbors
         shift_costs: 1Darray of length len(shift) containing the Euclidean
                     length to each neighbor
-        edge_weight: Weight defining importance of cable costs (=resistance to
-                    traverse cell with a cable) compared ot point costs
+        edge_weight: Weight defining importance of costs between points
+                compared to costs at the points themselves
     """
     edge_inst_len_x, edge_inst_len_y = edge_inst.shape
     # print(len(stack))

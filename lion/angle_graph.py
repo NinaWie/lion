@@ -168,8 +168,8 @@ class AngleGraph():
         self.instance[non_inf
                       ] = self.instance[non_inf] * self.resistance_weight
 
-        # If it is not allowed to traverse forbidden areas with a cable,
-        # transform edge instance accordingly
+        # If it is not allowed to traverse forbidden areas (i.e. forbidden area)
+        # is between two points), then transform edge instance accordingly
         if not between_points_allowed:
             self.edge_inst[self.instance == np.inf] = np.inf
 
@@ -463,7 +463,8 @@ class AngleGraph():
             angle_weight: Importance of angle costs compared to resistances
                 (=0 means only resistance is optimized, =1 means only angles
                 are minimized, i.e. output will be straightest line possible)
-            edge_weight: importance of cable costs vs point costs (default 0)
+            edge_weight: importance of costs of the cells between points vs 
+                cost at the point themselves (default 0 --> only points matter)
             max_angle: maximum deviation in angle from the straight connection
                        from start to end (default: pi/2)
             max_angle_lg: maximum angle at a point (default: pi/2)
