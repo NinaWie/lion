@@ -1,23 +1,9 @@
 import unittest
 import numpy as np
-import matplotlib.pyplot as plt  # TODO
+from lion.utils.plotting import plot_paths
 from lion.algorithms import (
     optimal_point_spotting, optimal_route, ksp_points, ksp_routes
 )
-
-
-def plot_paths(instance, paths, buffer=0, out_path="test_path.png"):
-    expanded = np.expand_dims(instance, axis=2)
-    expanded = np.tile(expanded, (1, 1, 3))  # overwrite instance by tiled one
-    # colour nodes in path in red
-    for path in paths:
-        for (x, y) in path:
-            expanded[x - buffer:x + buffer + 1, y - buffer:y + buffer +
-                     1] = [0.9, 0.2, 0.2]  # colour red
-    # plot and save
-    plt.figure(figsize=(25, 15))
-    plt.imshow(np.swapaxes(expanded, 1, 0))
-    plt.savefig(out_path, bbox_inches='tight')
 
 
 class TestAPI(unittest.TestCase):
