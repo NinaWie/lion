@@ -94,8 +94,7 @@ def edge_costs(
 
 @jit(nopython=True)
 def sp_dag(
-    stack, pos2node, shifts, angles_all, dists, preds, edge_cost, algorithm,
-    *args
+    stack, pos2node, shifts, angles_all, dists, edge_cost, algorithm, *args
 ):
     """
     Angle-weighted dynamic program for Directed Acyclic Graphs (O(n))
@@ -111,12 +110,10 @@ def sp_dag(
                     precomputed angle cost for each tuple of edges
         dists: 2Darray of size (n, len(shifts)) - contains distance of each
                edge from the source vertex
-        preds: 2Darray of size (n, len(shifts)) - contains optimal predecessor
-               of each edge from the source vertex
         edge_cost: 2Darray of size (n, len(shifts)) - edge cost for each edge
     """
-
     inst_x_len, inst_y_len = pos2node.shape
+    preds = np.zeros(dists.shape) - 1
     # print(len(stack))
     for i in range(len(dists)):
         v_x = stack[i, 0]

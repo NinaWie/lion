@@ -1,6 +1,5 @@
 import lion.utils.general as ut
 import lion.utils.costs as ut_cost
-import lion.utils.ksp as ut_ksp
 from lion.utils.shortest_path import get_update_algorithm
 from lion.fast_shortest_path import (
     sp_dag, sp_dag_reversed, topological_sort_jit, edge_costs
@@ -77,9 +76,10 @@ class AngleGraph():
         # construct shift values for diagonals
         self.shift_costs = np.array([np.linalg.norm(s) for s in self.shifts])
 
-    def add_nodes(self):
+    def _sort_cells_topologically(self):
         """
-        Initialize distances and predecessors, sort vertices topologically
+        Interface to topological_sort_jit - sort the vertices in the graph
+        topologically to iterate over them in the correct order
         """
         tic = time.time()
         # SORT --> Make stack
@@ -90,17 +90,26 @@ class AngleGraph():
             self.dest_inds[0], self.dest_inds[1],
             np.asarray(self.shifts) * (-1), visit_points, initial_pos2node, 0
         )
+        logger.info(f"topological sort in : {round(time.time() - tic, 3)}")
+        return initial_pos2node
+
+    def add_nodes(self):
+        """
+        Initialize distances and predecessors, sort vertices topologically
+        """
+        # sort vertices topologically
+        initial_pos2node = self._sort_cells_topologically()
+
         # build stack from pos2node (sort it)
         self.stack_array = np.dstack(
             np.unravel_index(
-                np.argsort(initial_pos2node.ravel()), visit_points.shape
+                np.argsort(initial_pos2node.ravel()), self.instance.shape
             )
         )[0]
         start_point = np.where(
             np.all(self.stack_array == self.start_inds, axis=1)
         )[0][0]
         self.stack_array = (self.stack_array[start_point:]).astype(int)
-        logger.info(f"constructed stack in : {round(time.time() - tic, 3)}")
         logger.debug(f"number of vertices in stack: {len(self.stack_array)}")
 
         # build pos2node
@@ -110,18 +119,26 @@ class AngleGraph():
         ).astype(int)
         self.pos2node[self.pos2node < 0] = -1
 
+        # check whether start can be reached from dest at all
+        # if yes, overwrite stack array etc, because it's wrong
+        if initial_pos2node[tuple(self.start_inds)] == -1:
+            logger.warning("start not reachable from target, empty path")
+            self.stack_array = np.array([self.start_inds, self.dest_inds])
+            self.pos2node = np.zeros(initial_pos2node.shape).astype(int) - 1
+            self.pos2node[tuple(self.start_inds)] = 0
+            self.pos2node[tuple(self.dest_inds)] = 1
+
         # initializes dists and predecessors
-        tic = time.time()
         self.dists = np.zeros(
             (len(self.stack_array), len(self.shifts))
         ) + np.inf
         self.dists[0, :] = 0
-        self.preds = np.zeros(self.dists.shape) - 1
-        self.time_logs["add_nodes"] = round(time.time() - tic, 3)
         self.n_pixels = self.x_len * self.y_len
         self.n_nodes = len(self.stack_array)
         self.n_edges = len(self.shifts) * len(self.dists)
-        logger.info(f"Graph size (number of edges): {self.n_edges}")
+        logger.info(
+            f"Number of edges: {len(self.stack_array)} x {len(self.shifts)}"
+        )
 
     def set_edge_costs(
         self,
@@ -230,7 +247,7 @@ class AngleGraph():
         shift_norms = [np.linalg.norm(s) for s in self.shifts]
         tic = time.time()
         # precompute edge costs
-        self.edge_cost = np.zeros(self.preds.shape) + np.inf
+        self.edge_cost = np.zeros(self.dists.shape) + np.inf
         self.edge_cost = edge_costs(
             self.stack_array, self.pos2node, np.array(self.shifts),
             self.edge_cost, self.instance, self.edge_inst, self.shift_lines,
@@ -247,7 +264,7 @@ class AngleGraph():
         if self.is_dag:
             self.dists, self.preds = sp_dag(
                 self.stack_array, self.pos2node, np.array(self.shifts),
-                self.angle_cost_array, self.dists, self.preds, self.edge_cost,
+                self.angle_cost_array, self.dists, self.edge_cost,
                 self.algorithm, self.args
             )
         else:

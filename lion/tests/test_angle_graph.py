@@ -37,9 +37,14 @@ class TestImplicitLG(unittest.TestCase):
 
     # construct instance that required 90 degree angle
     high_angle_corr = np.zeros(expl_shape)
-    high_angle_corr[start_inds[0], start_inds[1]:dest_inds[1] - 3] = 1
+    high_angle_corr[start_inds[0], start_inds[1]:dest_inds[1] - 4] = 1
+    high_angle_corr[start_inds[0] + 4:dest_inds[0] + 1, dest_inds[1]] = 1
+    # no_connection_corr: there is no way to get from start to dest at all
+    # with given point_dist_max
+    no_connection_corr = high_angle_corr.copy()
+    # high_angle_corr: there is a connection, but it requires a sharp turn
+    # and is not possible with smaller max_angle_lg
     high_angle_corr[start_inds[0], dest_inds[1]] = 1
-    high_angle_corr[start_inds[0] + 3:dest_inds[0] + 1, dest_inds[1]] = 1
 
     def test_correct_shortest_path(self) -> None:
         """ Test the implicit line graph construction """
@@ -113,7 +118,8 @@ class TestImplicitLG(unittest.TestCase):
         # assert that destination can NOT be reached
         dest_ind = graph.pos2node[tuple(self.dest_inds)]
         self.assertFalse(np.min(graph.dists[dest_ind]) < np.inf)
-
+        # Note: this test does not change the stack array because the path is
+        # only empty because of an inf in angles_all
         # NEXT TRY: more angles allowed
         self.cfg.max_angle_lg = np.pi
         graph = AngleGraph(self.example_inst, self.high_angle_corr)
@@ -122,6 +128,14 @@ class TestImplicitLG(unittest.TestCase):
         # assert that dest CAN be reached
         dest_ind = graph.pos2node[tuple(self.dest_inds)]
         self.assertTrue(np.min(graph.dists[dest_ind]) < np.inf)
+
+    def test_empty_path(self) -> None:
+        self.cfg.max_angle_lg = np.pi
+        graph = AngleGraph(self.example_inst, self.no_connection_corr)
+        _ = graph.single_sp(**vars(self.cfg))
+        # assert that destination can NOT be reached
+        dest_ind = graph.pos2node[tuple(self.dest_inds)]
+        self.assertFalse(np.min(graph.dists[dest_ind]) < np.inf)
 
 
 if __name__ == '__main__':
