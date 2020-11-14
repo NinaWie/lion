@@ -103,7 +103,7 @@ class AngleGraph():
         # build stack from pos2node (sort it)
         self.stack_array = np.dstack(
             np.unravel_index(
-                np.argsort(initial_pos2node.ravel()), self.instance.shape
+                np.argsort(initial_pos2node.ravel()), initial_pos2node.shape
             )
         )[0]
         start_point = np.where(
