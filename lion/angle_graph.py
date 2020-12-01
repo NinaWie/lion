@@ -40,8 +40,8 @@ class AngleGraph():
         self,
         start,
         dest,
-        pylon_dist_min=3,
-        pylon_dist_max=5,
+        point_dist_min=3,
+        point_dist_max=5,
         max_angle=np.pi / 2,
         **kwargs
     ):
@@ -50,14 +50,14 @@ class AngleGraph():
 
         Arguments:
             start, dest: list containing X and Y coordinate of source / dest
-            pylon_dist_min, pylon_dist_max: min and max distance of pylons
+            point_dist_min, point_dist_max: min and max distance of points
             max_angle: Maximum angle of edges to vec
         """
         self.start_inds = np.asarray(start)
         self.dest_inds = np.asarray(dest)
         vec = self.dest_inds - self.start_inds
         shifts = ut.get_half_donut(
-            pylon_dist_min, pylon_dist_max, vec, angle_max=max_angle
+            point_dist_min, point_dist_max, vec, angle_max=max_angle
         )
         shift_angles = [ut.angle_360(s, vec) for s in shifts]
         # sort the shifts
@@ -128,7 +128,7 @@ class AngleGraph():
         angle_weight=0,
         max_angle_lg=np.pi,
         angle_cost_function='linear',
-        cable_allowed=True,
+        between_points_allowed=True,
         **kwargs
     ):
         """
@@ -168,9 +168,9 @@ class AngleGraph():
         self.instance[non_inf
                       ] = self.instance[non_inf] * self.resistance_weight
 
-        # If it is not allowed to traverse forbidden areas with a cable,
-        # transform edge instance accordingly
-        if not cable_allowed:
+        # If it is not allowed to traverse forbidden areas (i.e. forbidden area)
+        # is between two points), then transform edge instance accordingly
+        if not between_points_allowed:
             self.edge_inst[self.instance == np.inf] = np.inf
 
     def _precompute_angles(self, max_angle_lg, angle_cost_function):
@@ -458,15 +458,16 @@ class AngleGraph():
             start_inds: list of two cell coordinates
             dest_inds: list of two cell coordinates
         Optional parameters:
-            pylon_dist_min: min cell distance of neighboring pylons (default 3)
-            pylon_dist_max: min cell distance of neighboring pylons (default 5)
+            point_dist_min: min cell distance of neighboring points (default 3)
+            point_dist_max: min cell distance of neighboring points (default 5)
             angle_weight: Importance of angle costs compared to resistances
                 (=0 means only resistance is optimized, =1 means only angles
                 are minimized, i.e. output will be straightest line possible)
-            edge_weight: importance of cable costs vs pylon costs (default 0)
+            edge_weight: importance of costs of the cells between points vs 
+                cost at the point themselves (default 0 --> only points matter)
             max_angle: maximum deviation in angle from the straight connection
                        from start to end (default: pi/2)
-            max_angle_lg: maximum angle at a pylon (default: pi/2)
+            max_angle_lg: maximum angle at a point (default: pi/2)
         """
         # assert that start and dest exist in kwargs and are in project region
         self._check_start_dest(**kwargs)

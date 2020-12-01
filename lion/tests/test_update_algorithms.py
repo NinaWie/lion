@@ -2,7 +2,6 @@ import unittest
 import numpy as np
 from lion.angle_graph import AngleGraph
 from types import SimpleNamespace
-import matplotlib.pyplot as plt
 from lion.fast_shortest_path import sp_dag
 from lion.utils.shortest_path import (
     update_default, update_linear, update_discrete
@@ -23,19 +22,10 @@ class TestUpdateAlgs(unittest.TestCase):
     corridor[tuple(dest_inds)] = 1
     cfg["start_inds"] = start_inds
     cfg["dest_inds"] = dest_inds
-    cfg["pylon_dist_min"] = 10
-    cfg["pylon_dist_max"] = 15
+    cfg["point_dist_min"] = 10
+    cfg["point_dist_max"] = 15
     cfg["layer_classes"] = ["dummy_class"]
     cfg["class_weights"] = [1]
-
-    def helper(self, dists, pos2node, save_name):
-        arr = np.zeros(pos2node.shape)
-        for i in range(len(pos2node)):
-            for j in range(len(pos2node)):
-                if pos2node[i, j] >= 0:
-                    arr[i, j] = np.min(dists[pos2node[i, j]])
-        plt.imshow(arr)
-        plt.savefig(save_name)
 
     def test_linear(self) -> None:
         """ LINEAR """
