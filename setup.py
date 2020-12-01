@@ -12,7 +12,7 @@ scripts = []
 
 setup(
     name='lion-sp',
-    version='2.0.0',
+    version='2.0.1',
     description='Linear optimization networks - shortest path algorithms',
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
