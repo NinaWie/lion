@@ -93,9 +93,7 @@ class KSP:
             x1 = min_shift_dists[x2, x3]
 
             # compute path and add to set
-            vertices_path = self.graph._combined_paths(
-                self.graph.start_inds, self.graph.dest_inds, x1, [x2, x3]
-            )
+            vertices_path = self.graph._combined_paths(x1, [x2, x3])
             best_paths.append(vertices_path)
             for (x, y) in vertices_path:
                 aux_arr[x, y] = 0
@@ -147,9 +145,7 @@ class KSP:
             # if self.graph.dists_ba[x1, x2, x3] == 0:
             # = 0 for inc edges of self.graph.dest_inds_inds (init of dists_ba)
             # continue
-            vertices_path = self.graph._combined_paths(
-                self.graph.start_inds, self.graph.dest_inds, s, [x, y]
-            )
+            vertices_path = self.graph._combined_paths(s, [x, y])
             vertices_path = np.array(vertices_path)
             # compute intersection with previous paths
             intersection_low_enough = ut_ksp.intersecting_ratio(
