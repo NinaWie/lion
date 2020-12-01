@@ -14,13 +14,14 @@ cfg - configuration: Dict with the following neceassay and optional parameters
 
     - forbidden_val: value indicating that a cell is forbidden / outside of
             the project region (can be int, np.nan, np.inf ... )
-    - pylon_dist_min: minimum cell distance of neighboring pylons (default 3)
-    - pylon_dist_max: minimum cell distance of neighboring pylons (default 5)
+    - point_dist_min: minimum cell distance of neighboring points (default 3)
+    - point_dist_max: minimum cell distance of neighboring points (default 5)
     - angle_weight: how important is the angle (default 0)
-    - edge_weight: importantance of cable costs compared to pylons (default 0)
+    - edge_weight: importantance of costs between points compared to points
+            themselves (default 0 --> only the cost at the points matters)
     - max_angle: maximum deviation in angle from the straight connection from
             start to end (default: pi/2)
-    - max_angle_lg: maximum angle at a pylon (default: pi)
+    - max_angle_lg: maximum angle at a point (default: pi)
     - angle_cost_function: 'linear' and 'discrete' are implemented
     - memory_limit: Maximum number of edges that is allowed (default: 50 Mio)
             If the number of edges is higher, an iterative procedure is used.
@@ -39,8 +40,8 @@ cfg - configuration: Dict with the following neceassay and optional parameters
             memory_limit) then downsample by factor of 1 (aka full resolution).
             There is no support for setting the corridor width manually because
             it does not make sense to make it smaller than it could be
-    - cable_allowed: If True, then forbidden areas can still be traversed with
-            a cable (only placing a pylon is forbidden)
+    - between_points_allowed: If True, then forbidden areas can still be
+            traversed, i.e. two points can be placed around a forbidden area
             If False, then forbidden areas can not be traversed either
     - diversity_threshold:
         FOR KSP.ksp:
@@ -120,8 +121,8 @@ def optimal_route(instance, cfg):
     graph, cfg = _initialize_graph(instance, cfg)
 
     # set the ring to the 8-neighborhood
-    cfg["pylon_dist_min"] = 0.9
-    cfg["pylon_dist_max"] = 1.5
+    cfg["point_dist_min"] = 0.9
+    cfg["point_dist_max"] = 1.5
 
     # compute path
     tic_raster = time.time()
@@ -133,11 +134,11 @@ def optimal_route(instance, cfg):
     return path
 
 
-def optimal_pylon_spotting(
+def optimal_point_spotting(
     instance, cfg, corridor=None, k=1, algorithm=KSP.ksp
 ):
     """
-    Compute the (angle-) optimal pylon spotting
+    Compute the (angle-) optimal point spotting
     @params:
         instance: 2D np array of resistances (see details top of file)
         cfg: config dict, must contain start and dest (see details top of file)
@@ -145,7 +146,7 @@ def optimal_pylon_spotting(
             - a path, e.g. output of optimal_route, or
             - a 2D array with 0: do not consider, 1: consider
     @returns:
-        a single optimal path of pylons (list of X Y coordinates)
+        a single optimal path of points (list of X Y coordinates)
         or empty list if no path exists
     """
     # initialize graph
@@ -217,7 +218,7 @@ def _run_ksp(graph, cfg, k, algorithm=KSP.ksp):
     Build the shortest path trees and compute k diverse shortest paths
     Arguments:
         graph: AngleGraph object that was initialized with the instance
-               (as passed from ksp_routes or ksp_pylons)
+               (as passed from ksp_routes or ksp_points)
         cfg: See beginning of file for possible parameters
         k: Number of diverse alternatives to compute. Attention: Might output
             less than k paths if no further sufficiently diverse path is found
@@ -266,16 +267,16 @@ def ksp_routes(instance, cfg, k, algorithm=KSP.ksp):
     graph, cfg = _initialize_graph(instance, cfg)
 
     # set the ring to the 8-neighborhood
-    cfg["pylon_dist_min"] = 1
-    cfg["pylon_dist_max"] = 1.5
+    cfg["point_dist_min"] = 1
+    cfg["point_dist_max"] = 1.5
 
     # run algorithm
     return _run_ksp(graph, cfg, k, algorithm=algorithm)
 
 
-def ksp_pylons(instance, cfg, k, algorithm=KSP.ksp):
+def ksp_points(instance, cfg, k, algorithm=KSP.ksp):
     """
-    Compute the (angle-) optimal k diverse shortest path of PYLONS
+    Compute the (angle-) optimal k diverse shortest path of pointS
     @params:
         instance: 2D np array of resistances (see details top of file)
         cfg: config dict, must contain start and dest (see details top of file)
@@ -284,4 +285,4 @@ def ksp_pylons(instance, cfg, k, algorithm=KSP.ksp):
     @returns:
         A list of paths (each path is again a list of X Y coordinates)
     """
-    return optimal_pylon_spotting(instance, cfg, k=k, algorithm=algorithm)
+    return optimal_point_spotting(instance, cfg, k=k, algorithm=algorithm)
