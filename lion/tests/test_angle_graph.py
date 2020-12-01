@@ -12,8 +12,8 @@ class TestImplicitLG(unittest.TestCase):
 
     # create configuration
     cfg = SimpleNamespace()
-    cfg.pylon_dist_min = 3
-    cfg.pylon_dist_max = 5
+    cfg.point_dist_min = 3
+    cfg.point_dist_max = 5
     start_inds = np.array([6, 6])
     dest_inds = np.array([41, 43])
     cfg.start_inds = start_inds

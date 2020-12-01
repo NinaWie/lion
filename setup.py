@@ -11,24 +11,23 @@ if os.path.exists('README.md'):
 scripts = []
 
 setup(
-    name='lion',
-    version='1.3.1',
-    description='Linear infrastructure optimization networks',
+    name='lion-sp',
+    version='2.0.0',
+    description='Linear optimization networks - shortest path algorithms',
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
     author='Nina Wiedemann',
-    author_email=('wnina@ethz.ch'),
-    url='https://gitlab.ethz.ch/wnina/lion',
+    author_email=('nwiedemann@uos.de'),
+    url='https://github.com/NinaWie/lion',
     license='MIT',
-    install_requires=['numpy', 'numba', 'matplotlib', 'scipy'],
+    install_requires=['numpy', 'numba', 'scipy'],
     classifiers=[
-        'Intended Audience :: Developers',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.6',
         'Topic :: Software Development :: Libraries :: Python Modules'
     ],
     packages=find_packages('.'),
+    python_requires='>=3.6',
     scripts=scripts
 )

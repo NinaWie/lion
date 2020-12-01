@@ -44,7 +44,7 @@ def rescale(instance, corridor, cfg, factor):
     Arguments:
         instance: 2D array with resistances
         corridor: 2D array with binary (0=forbidden, 1=feasible)
-        cfg: configuration with start, dest and pylon distances
+        cfg: configuration with start, dest and point distances
         factor: Int > 0 : factor by which to downsample
     """
     current_cfg = cfg.copy()
@@ -72,10 +72,10 @@ def rescale(instance, corridor, cfg, factor):
         ) and current_cfg["diversity_threshold"] > 1:
             current_cfg["diversity_threshold"
                         ] = cfg["diversity_threshold"] / factor
-        # downscale the pylon distances
-        if "pylon_dist_min" in current_cfg.keys():
-            current_cfg["pylon_dist_min"] = cfg["pylon_dist_min"] / factor
-            current_cfg["pylon_dist_max"] = cfg["pylon_dist_max"] / factor
+        # downscale the point distances
+        if "point_dist_min" in current_cfg.keys():
+            current_cfg["point_dist_min"] = cfg["point_dist_min"] / factor
+            current_cfg["point_dist_max"] = cfg["point_dist_max"] / factor
         return current_instance, current_corridor, current_cfg
     else:
         return instance, corridor, cfg
@@ -275,8 +275,8 @@ def pipeline_corridor(paths, out_shape, n_shifts, mem_limit, next_factor):
         path_points: list of arrays of shape (n, 2) containing the points on one
                 or more paths that have been found in the previous iteration
         out_shape: Tuple, shape of array that will be the output corridor
-        n_shifts: Int, Number of neighbors per vertex (based on pylon_dist_min
-                and pylon_dist_max)
+        n_shifts: Int, Number of neighbors per vertex (based on point_dist_min
+                and point_dist_max)
         mem_limit: Int, Maximum number of edges
         next_factor: Int, downsampling factor in the upcoming next iteration
     """

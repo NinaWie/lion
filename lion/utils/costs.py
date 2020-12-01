@@ -37,19 +37,20 @@ def compute_geometric_costs(path, instance, edge_weight=0):
     Arguments:
         path: List or array of path corrdinates
         instance: 2D array of resistances
-        edge_costs: 1D array, previously computed cable costs along the path
+        edge_costs: 1D array, previously computed costs between points along
+            the path
     Returns:
         List of geometric edge costs along the path
     """
     path = np.array(path)
-    # compute the cable costs (bresenham line between pylons)
+    # compute the between point costs (bresenham line between points)
     edge_costs = np.zeros(len(path))
     if edge_weight != 0:
         edge_costs = compute_edge_costs(path, instance) * edge_weight
 
     geometric_costs = []
     for p in range(len(path) - 1):
-        # cable costs
+        # between point costs
         bresenham_edge_dist = edge_costs[p]
         # compute distance inbetween
         shift_costs = np.linalg.norm(path[p] - path[p + 1])
