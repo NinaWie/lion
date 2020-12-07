@@ -97,10 +97,16 @@ def _initialize_graph(instance, cfg):
 
     # fill values in instance
     instance[project_region == 0] = np.max(normal_vals)
-    instance = (instance - np.min(normal_vals)
-                ) / (np.max(normal_vals) - np.min(normal_vals))
+    non_zero_add = .001  # instance must not contain zeros
+    # normalize to values between non_zero_add and 1
+    instance = non_zero_add + (1 - non_zero_add) * (
+        instance - np.min(normal_vals)
+    ) / (np.max(normal_vals) - np.min(normal_vals))
+    assert np.min(instance) > 0 and np.isclose(
+        np.max(instance), 1
+    ), "Minimum must be greater than zero and maximum ~1 after normalizing"
 
-    # init graph
+    # initialize graph
     graph = AngleGraph(instance, project_region)
 
     return graph, cfg
