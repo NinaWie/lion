@@ -81,7 +81,7 @@ if __name__ == "__main__":
         # plotting - set high values to inf because otherwise everthing except
         # for the high cost area will be just black
         plot_instance = test_instance.copy().astype(float)
-        plot_instance[plot_instance == cfg["forbidden_val"]] = np.inf
+        plot_instance[plot_instance == np.max(plot_instance)] = np.inf
         # set buffer: Bigger instance --> use bigger buffer
         plot_paths(
             plot_instance,
