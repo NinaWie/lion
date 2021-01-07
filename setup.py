@@ -19,11 +19,9 @@ setup(
     author='Nina Wiedemann',
     author_email=('nwiedemann@uos.de'),
     url='https://github.com/NinaWie/lion',
-    license='MIT',
     install_requires=['numpy', 'numba', 'scipy'],
     classifiers=[
         'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3.6',
         'Topic :: Software Development :: Libraries :: Python Modules'
     ],
