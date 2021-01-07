@@ -237,7 +237,7 @@ class AngleGraph():
     # --------------------------------------------------------------------
     # SHORTEST PATH COMPUTATION
 
-    def build_source_sp_tree(self, edge_weight=0.2, **kwargs):
+    def build_source_sp_tree(self, edge_weight=0, **kwargs):
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
         if np.any(shift_norms == 1):

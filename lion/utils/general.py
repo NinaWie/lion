@@ -305,10 +305,10 @@ def pipeline_corridor(paths, out_shape, n_shifts, mem_limit, next_factor):
     # mem_limit = 1000 --> we can use 200 instead of 20 as the corridor width
     # (but must be at least 10)
     optimal_corridor_width = max(
-        [test_corridor_width * mem_limit / estimated_edges_20, 10]
+        [test_corridor_width * mem_limit / estimated_edges_20, 3]
     )
     # get the corridor with all cells closer than optimal_corridor_width
-    corridor = (distance_transform < optimal_corridor_width).astype(int)
+    corridor = (distance_transform <= optimal_corridor_width).astype(int)
     logger.info(
         f"Next corridor around path was set to width {optimal_corridor_width}"
     )

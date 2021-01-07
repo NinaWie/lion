@@ -97,7 +97,7 @@ def _initialize_graph(instance, cfg):
 
     # fill values in instance
     instance[project_region == 0] = np.max(normal_vals)
-    non_zero_add = .001  # instance must not contain zeros
+    non_zero_add = 1e-8  # instance must not contain zeros
     # normalize to values between non_zero_add and 1
     instance = non_zero_add + (1 - non_zero_add) * (
         instance - np.min(normal_vals)
@@ -189,7 +189,7 @@ def optimal_point_spotting(
         assert isinstance(factor, int) or float(factor).is_integer(
         ), "downsampling factors in pipeline must be integers"
         logger.info(
-            f"Start {pipe_step+1}th step of pipeline with factor {factor}"
+            f"---------- Start {pipe_step+1}th step {factor} ---------------"
         )
         # rescale and set parameters accordingly
         corridor = (corridor * original_corr > 0).astype(int)
