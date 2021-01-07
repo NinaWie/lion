@@ -12,15 +12,17 @@ scripts = []
 
 setup(
     name='lion-sp',
-    version='2.0.2',
+    version='0.1.0',
     description='Linear optimization networks - shortest path algorithms',
     long_description=LONG_DESCRIPTION,
     long_description_content_type="text/markdown",
     author='Nina Wiedemann',
     author_email=('nwiedemann@uos.de'),
+    license="GPLv3",
     url='https://github.com/NinaWie/lion',
     install_requires=['numpy', 'numba', 'scipy'],
     classifiers=[
+        "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         'Intended Audience :: Science/Research',
         'Programming Language :: Python :: 3.6',
         'Topic :: Software Development :: Libraries :: Python Modules'
