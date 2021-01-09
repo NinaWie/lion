@@ -4,6 +4,7 @@ env
 
 data
 
+.coverage
 __pycache__/
 
 # jupyter

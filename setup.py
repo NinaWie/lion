@@ -20,7 +20,7 @@ setup(
     author_email=('nwiedemann@uos.de'),
     license="GPLv3",
     url='https://github.com/NinaWie/lion',
-    install_requires=['numpy', 'numba', 'scipy'],
+    install_requires=['numpy', 'numba', 'scipy', 'coverage'],
     classifiers=[
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         'Intended Audience :: Science/Research',
