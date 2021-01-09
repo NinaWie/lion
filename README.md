@@ -1,3 +1,5 @@
+![run_unit_tests](https://github.com/NinaWie/lion/workflows/run_unit_tests/badge.svg)
+
 # LInear optimization networks (LION)
 
 
