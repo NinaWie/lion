@@ -1,6 +1,8 @@
-![run_unit_tests](https://github.com/NinaWie/lion/workflows/run_unit_tests/badge.svg)
+![build](https://github.com/NinaWie/lion/workflows/run_unit_tests/badge.svg)
+[![codecov](https://codecov.io/gh/NinaWie/lion/branch/master/graph/badge.svg?token=e9c953ec-6da4-4729-8dfa-636c8638e6df)](https://codecov.io/gh/NinaWie/lion)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-# LInear optimization networks (LION)
+# LInear Optimization Networks (LION)
 
 
     
