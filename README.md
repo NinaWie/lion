@@ -30,11 +30,15 @@ Possible applications include
 
 ## Installation
 
-The library itself has few major dependencies (see [setup.py](setup.py)). 
+Simple install with pip:
+```
+pip install lion-sp
+```
+
+The library itself has few dependencies (see [setup.py](setup.py)). 
 * `numba` (for fast compiled algorithms)
 * `numpy`
 * `scipy`
-
 
 
 **Installation from git:**
@@ -102,7 +106,7 @@ All main functions are available in [algorithms](lion/algorithms.py). Usage is e
 ```sh
 np.random.seed(0)
 instance = np.random.rand(100,100)
-# set some forbidden values
+# place some forbidden regions
 instance[instance>0.9] = np.inf
 # define config dictionary
 cfg = {
