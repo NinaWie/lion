@@ -361,7 +361,7 @@ class AngleGraph():
         dest_ind_stack = self.pos2node[tuple(self.dest_inds)]
         if not np.any(self.dists[dest_ind_stack, :] < np.inf):
             logger.warning("WARNING: Empty path!")
-            return [], [], 0
+            return []
         tic = time.time()
 
         # backtrack from dest to start from predecessor maps

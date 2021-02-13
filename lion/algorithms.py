@@ -207,7 +207,7 @@ def optimal_point_spotting(
         logger.debug(f"got {len(paths)} paths in this step")
 
         # compute next corridor
-        if pipe_step < len(pipeline) - 1:
+        if pipe_step < len(pipeline) - 1 and len(paths[0]) > 0:
             corridor = ut_general.pipeline_corridor(
                 paths, instance.shape, orig_shifts, mem_limit,
                 pipeline[pipe_step + 1]

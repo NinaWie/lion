@@ -19,8 +19,11 @@ def get_update_algorithm(func, angle_cost_array, in_edges, out_edges=None):
         algorithm: function, update algorithm to be used
         args: Tuple, corresponding arguments
     """
-    if func == "linear" and len(angle_cost_array) > 50:
+    if func == "linear" and len(angle_cost_array) > 50 and np.all(
+        angle_cost_array < np.inf
+    ):
         # >50 because hidden factors in O-notation - will be slower
+        # all must be smaller inf becasue otherwise it's nonlinear
         args = (angle_cost_array)
         algorithm = update_linear
     elif func == "discrete" and len(angle_cost_array) > 100:
