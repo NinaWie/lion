@@ -176,9 +176,9 @@ def compute_angle_cost(ang, max_angle_lg, mode="linear"):
     if mode == "linear":
         return ang / max_angle_lg
     elif mode == "discrete":
-        if ang > max_angle_lg:
+        if ang >= max_angle_lg:
             return np.inf
-        elif angle == 0:
+        elif ang == 0:
             return 0
         elif ang <= np.pi / 6:
             return 0.3
