@@ -77,6 +77,7 @@ class TestUpdateAlgs(unittest.TestCase):
         """ DISCRETE """
         self.cfg["angle_cost_function"] = "discrete"
         self.cfg["max_angle_lg"] = np.pi / 4
+        self.cfg["angle_weight"] = .3
         graph = AngleGraph(self.instance, self.corridor)
         _ = graph.single_sp(**self.cfg)
         gt_angle_cost_arr = graph.angle_cost_array.copy()
