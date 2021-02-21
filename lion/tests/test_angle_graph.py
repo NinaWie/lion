@@ -20,8 +20,8 @@ class TestImplicitLG(unittest.TestCase):
     cfg.dest_inds = dest_inds
     cfg.angle_weight = 0.25
     cfg.edge_weight = 0
-    cfg.max_angle = np.pi / 2
-    cfg.max_angle_lg = np.pi / 4
+    cfg.max_direction_deviation = np.pi / 2
+    cfg.max_angle = np.pi / 4
     cfg.layer_classes = ["dummy_class"]
     cfg.class_weights = [1]
 
@@ -43,7 +43,7 @@ class TestImplicitLG(unittest.TestCase):
     # with given point_dist_max
     no_connection_corr = high_angle_corr.copy()
     # high_angle_corr: there is a connection, but it requires a sharp turn
-    # and is not possible with smaller max_angle_lg
+    # and is not possible with smaller max_angle
     high_angle_corr[start_inds[0], dest_inds[1]] = 1
 
     def test_correct_shortest_path(self) -> None:
@@ -121,7 +121,7 @@ class TestImplicitLG(unittest.TestCase):
         # Note: this test does not change the stack array because the path is
         # only empty because of an inf in angles_all
         # NEXT TRY: more angles allowed
-        self.cfg.max_angle_lg = np.pi
+        self.cfg.max_angle = np.pi
         graph = AngleGraph(self.example_inst, self.high_angle_corr)
         path = graph.single_sp(**vars(self.cfg))
         path, _, cost_sum = graph.transform_path(path)
@@ -130,7 +130,7 @@ class TestImplicitLG(unittest.TestCase):
         self.assertTrue(np.min(graph.dists[dest_ind]) < np.inf)
 
     def test_empty_path(self) -> None:
-        self.cfg.max_angle_lg = np.pi
+        self.cfg.max_angle = np.pi
         graph = AngleGraph(self.example_inst, self.no_connection_corr)
         _ = graph.single_sp(**vars(self.cfg))
         # assert that destination can NOT be reached

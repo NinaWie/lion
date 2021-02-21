@@ -19,9 +19,12 @@ cfg - configuration: Dict with the following neceassay and optional parameters
     - angle_weight: how important is the angle (default 0)
     - edge_weight: importantance of costs between points compared to points
             themselves (default 0 --> only the cost at the points matters)
-    - max_angle: maximum deviation in angle from the straight connection from
-            start to end (default: pi/2)
-    - max_angle_lg: maximum angle at a point (default: pi)
+    - max_direction_deviation: maximum deviation from the straight direction
+            from start to end. Unit: angle value (in rad). The default is
+            pi/2, which is also the maximum possible in the current version.
+            In explanation, going sidewards by 90 degrees is possible but
+            going backwards is not possible.
+    - max_angle: maximum angle at a point (default: pi)
     - angle_cost_function: 'linear' and 'discrete' are implemented
     - memory_limit: Maximum number of edges that is allowed (default: 50 Mio)
             If the number of edges is higher, an iterative procedure is used.
