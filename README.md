@@ -74,8 +74,8 @@ All main functions are available in [algorithms](lion/algorithms.py). Usage is e
   * `point_dist_max`: minimum cell distance of neighboring points (default 5)
   * `angle_weight`: how important is the angle (default 0)
   * `edge_weight`: importantance of costs between points compared to the cost at the points (default=0, i.e. only the points count)
-  * `max_angle`: maximum deviation in angle from the straight connection from start to end (default: pi/2)
-  * `max_angle_lg`: maximum angle of adacent edges (default: pi, i.e. no restriction)
+  * `max_direction_deviation`: maximum deviation in angle from the straight connection from start to end (default: pi/2)
+  * `max_angle`: maximum angle of adacent edges (default: pi, i.e. no restriction)
   * `angle_cost_function`: 'linear' and 'discrete' are implemented. See [code](lion/utils/general.py)
   * `memory_limit`: default is 1 trillion, if the number of edges is higher, an iterative approximation procedure (''pipeline'') is used
   * `pipeline`: List of decreasing positive integers, ending with 1

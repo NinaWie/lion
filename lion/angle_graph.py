@@ -41,7 +41,7 @@ class AngleGraph():
         dest,
         point_dist_min=3,
         point_dist_max=5,
-        max_angle=np.pi / 2,
+        max_direction_deviation=np.pi / 2,
         **kwargs
     ):
         """
@@ -50,13 +50,16 @@ class AngleGraph():
         Arguments:
             start, dest: list containing X and Y coordinate of source / dest
             point_dist_min, point_dist_max: min and max distance of points
-            max_angle: Maximum angle of edges to vec
+            max_direction_deviation: Maximum angle of edges to vec
         """
         self.start_inds = np.asarray(start)
         self.dest_inds = np.asarray(dest)
         vec = self.dest_inds - self.start_inds
         shifts = ut.get_half_donut(
-            point_dist_min, point_dist_max, vec, angle_max=max_angle
+            point_dist_min,
+            point_dist_max,
+            vec,
+            max_deviation=max_direction_deviation
         )
         shift_angles = [ut.angle_360(s, vec) for s in shifts]
         # sort the shifts
@@ -64,7 +67,7 @@ class AngleGraph():
         self.shift_tuples = self.shifts
 
         # determine whether the graph is directed acyclic
-        self.is_dag = max_angle <= np.pi / 2
+        self.is_dag = max_direction_deviation <= np.pi / 2
 
         # construct bresenham lines
         shift_lines = List()
@@ -143,7 +146,7 @@ class AngleGraph():
     def set_edge_costs(
         self,
         angle_weight=0,
-        max_angle_lg=np.pi,
+        max_angle=np.pi,
         angle_cost_function='linear',
         between_points_allowed=True,
         **kwargs
@@ -159,7 +162,7 @@ class AngleGraph():
             angle_weight: Importance of angle costs compared to resistances
                 (=0 means only resistance is optimized, =1 means only angles
                 are minimized, i.e. output will be straightest line possible)
-            max_angle_lg: maximum angle between a adjacent edges on the path
+            max_angle: maximum angle between a adjacent edges on the path
             angle_cost_function: Currently implemented "linear" and "discrete"
                         Function defines the cost per angle, implemented in
                         utils/general.py (function compute_angle_cost)
@@ -173,7 +176,7 @@ class AngleGraph():
 
         # in precomute angles, it is multiplied with angle weights
         self.angle_cost_array = self._precompute_angles(
-            max_angle_lg, angle_cost_function
+            max_angle, angle_cost_function
         )
         # multiply with angle weights, need to prevent that not inf * 0
         non_inf = self.angle_cost_array < np.inf
@@ -190,11 +193,11 @@ class AngleGraph():
         if not between_points_allowed:
             self.edge_inst[self.instance == np.inf] = np.inf
 
-    def _precompute_angles(self, max_angle_lg, angle_cost_function):
+    def _precompute_angles(self, max_angle, angle_cost_function):
         """
         Helper function to precompute the angle costs for all tuples of edges
         Arguments:
-            max_angle_lg: maximum feasible angle
+            max_angle: maximum feasible angle
             angle_cost_function: funct to compute cost dependent on the angle
                         currently implemented: linear and one discrete option
         """
@@ -212,8 +215,7 @@ class AngleGraph():
             ]
         )
         # compute feasible maximum value
-        max_angle = np.max(angles_raw[angles_raw <= max_angle_lg])
-        self.angle_norm_factor = max_angle
+        self.angle_norm_factor = np.max(angles_raw[angles_raw <= max_angle])
 
         # compute angle costs (and normalize)
         slen = len(self.shifts)
@@ -270,7 +272,7 @@ class AngleGraph():
         else:
             raise NotImplementedError(
                 "Angle shortest path not implemented for cyclic graph.\
-                    Please set max_angle <= np.pi / 2 in config"
+                    Please set max_direction_deviation <= np.pi / 2 in config"
             )
 
         self.time_logs["shortest_path"] = round(time.time() - tic, 3)
@@ -361,7 +363,7 @@ class AngleGraph():
         dest_ind_stack = self.pos2node[tuple(self.dest_inds)]
         if not np.any(self.dists[dest_ind_stack, :] < np.inf):
             logger.warning("WARNING: Empty path!")
-            return [], [], 0
+            return []
         tic = time.time()
 
         # backtrack from dest to start from predecessor maps
@@ -491,9 +493,9 @@ class AngleGraph():
                 are minimized, i.e. output will be straightest line possible)
             edge_weight: importance of costs of the cells between points vs 
                 cost at the point themselves (default 0 --> only points matter)
-            max_angle: maximum deviation in angle from the straight connection
+            max_direction_deviation: maximum deviation in angle from the straight connection
                        from start to end (default: pi/2)
-            max_angle_lg: maximum angle at a point (default: pi/2)
+            max_angle: maximum angle at a point (default: pi/2)
         """
         # assert that start and dest exist in kwargs and are in project region
         self._check_start_dest(**kwargs)

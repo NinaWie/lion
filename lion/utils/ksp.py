@@ -108,28 +108,6 @@ def intersecting_ratio(path_list, current_path, max_intersection):
     return True
 
 
-def get_sp_from_preds(pred_map, curr_vertex, start_vertex):
-    """
-    Compute path from start_vertex to curr_vertex from the predecessor map
-    Arguments:
-        pred_map: map / dictionary with predecessor for each vertex
-        curr_vertex: integer denoting any vertex
-        start_vertex: integer denoting start vertex
-    returns:
-        list of vertices (integers)
-    """
-    path = [int(curr_vertex)]
-    counter = 0
-    while curr_vertex != start_vertex:
-        curr_vertex = pred_map[curr_vertex]
-        path.append(curr_vertex)
-        if counter > 1000:
-            print(path)
-            raise RuntimeWarning("while loop for sp not terminating")
-        counter += 1
-    return path
-
-
 def path_distance(p1, p2, mode="jaccard"):
     """
     Compute the distance between two paths
@@ -161,27 +139,6 @@ def path_distance(p1, p2, mode="jaccard"):
         )
 
 
-def similarity(s1, s2, mode="IoU"):
-    """
-    Implements similarity metrics from Liu et al paper
-    Arguments:
-        s1,s2: SETS of path points
-    """
-    path_inter = len(s1.intersection(s2))
-    if mode == "IoU":
-        return path_inter / len(s1.union(s2))
-    elif mode == "sim2paper":
-        return path_inter / (2 * len(s1)) + path_inter / (2 * len(s2))
-    elif mode == "sim3paper":
-        return np.sqrt(path_inter**2 / (len(s1) * len(s2)))
-    elif mode == "max_norm_sim":
-        return path_inter / (max([len(s1), len(s2)]))
-    elif mode == "min_norm_sim":
-        return path_inter / (min([len(s1), len(s2)]))
-    else:
-        raise NotImplementedError("mode wrong, not implemented yet")
-
-
 def pairwise_dists(collected_coords, mode="jaccard"):
     nr_paths = len(collected_coords)
     dists = np.zeros((nr_paths, nr_paths))
@@ -192,35 +149,3 @@ def pairwise_dists(collected_coords, mode="jaccard"):
             )
             dists[j, i] = dists[i, j]
     return dists
-
-
-def _flat_ind_to_inds(flat_ind, arr_shape):
-    """
-    Transforms an index of a flattened 3D array to its original coords
-    """
-    _, len2, len3 = arr_shape
-    x1 = flat_ind // (len2 * len3)
-    x2 = (flat_ind % (len2 * len3)) // len3
-    x3 = (flat_ind % (len2 * len3)) % len3
-    return (x1, x2, x3)
-
-
-def evaluate_sim(ksp, metric):
-    """
-    evaluate ksp diversity according to several metric
-    """
-    ksp_paths = [k[0] for k in ksp]
-    divs = []
-    # compute pariwise path distances
-    for i in range(len(ksp_paths)):
-        for j in range(i + 1, len(ksp_paths)):
-            divs.append(path_distance(ksp_paths[i], ksp_paths[j], mode=metric))
-    return np.mean(divs)
-
-
-def evaluate_cost(ksp):
-    """
-    Evaluate ksp with respect to the overall and maximal costs
-    """
-    ksp_all_costs = [k[2] for k in ksp]
-    return [np.sum(ksp_all_costs), np.max(ksp_all_costs)]

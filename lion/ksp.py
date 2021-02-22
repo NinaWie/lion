@@ -156,6 +156,4 @@ class KSP:
                 best_paths.append(vertices_path)
                 if len(best_paths) >= k:
                     break
-        self.graph.time_logs["ksp"] = round(time.time() - tic, 3)
-        logger(f"FIND KSP time: {self.graph.time_logs['ksp']}")
         return best_paths

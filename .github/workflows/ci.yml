@@ -22,7 +22,7 @@ jobs:
           pip install -e .
       - name: Run unit tests
         run:
-          coverage run -m unittest discover -t . -p "test_*py" lion
+          NUMBA_DISABLE_JIT=1 coverage run -m unittest discover -t . -p "test_*py" lion
       - name: Upload to codecov
         run:
           bash <(curl -s https://codecov.io/bash)

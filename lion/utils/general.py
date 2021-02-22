@@ -139,7 +139,7 @@ def get_donut_vals(donut_tuples, vec):
     return [angle(tup, vec) + 0.1 for tup in donut_tuples]
 
 
-def get_half_donut(radius_low, radius_high, vec, angle_max=0.5 * np.pi):
+def get_half_donut(radius_low, radius_high, vec, max_deviation=0.5 * np.pi):
     """
     Returns only the points with x >= 0 of the donut points (see above)
     :param radius_low: minimum radius
@@ -153,12 +153,12 @@ def get_half_donut(radius_low, radius_high, vec, angle_max=0.5 * np.pi):
         # compute angle
         ang = angle([i, j], vec)
         # add all valid ones
-        if ang <= angle_max:
+        if ang <= max_deviation:
             new_tuples.append((i, j))
     return new_tuples
 
 
-def compute_angle_cost(ang, max_angle_lg, mode="linear"):
+def compute_angle_cost(ang, max_angle, mode="linear"):
     """
     Implementation of different angle cost functions:
         linear: cost increases linearly with the angle
@@ -166,7 +166,7 @@ def compute_angle_cost(ang, max_angle_lg, mode="linear"):
         quadratic could be another option, just definition of a function
     Arguments:
         ang: float between 0 and pi, angle between edges
-        max_angle_lg: maximum angle cutoff
+        max_angle: maximum angle cutoff
         mode: "norm" or "discrete"
     returns: angle costs
     Here computed as Stefano said: up to 30 degrees + 50%, up to 60 degrees
@@ -174,20 +174,20 @@ def compute_angle_cost(ang, max_angle_lg, mode="linear"):
     """
     # TODO: 3 times technical costs for example
     if mode == "linear":
-        return ang / max_angle_lg
+        return ang / max_angle
     elif mode == "discrete":
-        if ang == 0:
+        if ang >= max_angle:
+            return np.inf
+        elif ang <= 0.1:
             return 0
-        if ang <= np.pi / 6:
+        elif ang <= np.pi / 6:
             return 0.3
         elif ang <= np.pi / 3:
             return 0.6
-        elif ang <= max_angle_lg:
-            return 1
         else:
-            return np.inf
+            return 1
     elif mode == "squared":
-        return (ang / max_angle_lg)**2
+        return (ang / max_angle)**2
     else:
         raise NotImplementedError
 
@@ -209,7 +209,11 @@ def angle_360(vec1, vec2, normalize=True):
 
 
 def get_lg_donut(
-    radius_low, radius_high, vec, max_angle, max_angle_lg=np.pi / 4
+    radius_low,
+    radius_high,
+    vec,
+    max_direction_deviation,
+    max_angle=np.pi / 4
 ):
     """
     Compute all possible combinations (tuples) of edges in restricted angle
@@ -228,8 +232,8 @@ def get_lg_donut(
             for (k, l) in tuple_zip:
                 ang = angle([-k, -l], [i, j])
                 # if smaller max angle and general outgoing half
-                if ang <= max_angle_lg and k * vec[0] + l * vec[1] >= 0:
-                    angle_norm = compute_angle_cost(ang, max_angle_lg)
+                if ang <= max_angle and k * vec[0] + l * vec[1] >= 0:
+                    angle_norm = compute_angle_cost(ang, max_angle)
                     linegraph_tuples.append([[i, j], [k, l], angle_norm])
     return linegraph_tuples
 
