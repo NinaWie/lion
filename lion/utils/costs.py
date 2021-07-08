@@ -56,10 +56,10 @@ def compute_geometric_costs(path, instance, edge_weight=0):
         shift_costs = np.linalg.norm(path[p] - path[p + 1])
         # compute geometric edge costs
         geometric_costs.append(
-            shift_costs * (
+            (
                 0.5 *
                 (instance[tuple(path[p])] + instance[tuple(path[p + 1])]) +
-                bresenham_edge_dist
+                shift_costs * bresenham_edge_dist
             )
         )
     geometric_costs.append(0)
