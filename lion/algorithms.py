@@ -90,7 +90,11 @@ def _initialize_graph(instance, cfg):
     project_region[np.isnan(instance)] = 0
     project_region[instance == forbidden_val] = 0
 
-    # normalize instance -- necessary to have comparable angle weight
+    # instance must not contain zeros
+    non_zero_add = 1e-8
+    instance += non_zero_add
+
+    # compute maximum values without forbidden weight
     normal_vals = instance[
         np.logical_and(instance != forbidden_val, ~np.isnan(instance))]
     assert np.all(
@@ -100,11 +104,9 @@ def _initialize_graph(instance, cfg):
 
     # fill values in instance
     instance[project_region == 0] = np.max(normal_vals)
-    non_zero_add = 1e-8  # instance must not contain zeros
-    # normalize to values between non_zero_add and 1
-    instance = non_zero_add + (1 - non_zero_add) * (
-        instance - np.min(normal_vals)
-    ) / (np.max(normal_vals) - np.min(normal_vals))
+    # normalize instance by maximum value (excluding forbidden areas)
+    # normalization is necessary to balance angle- and resistance-costs
+    instance = instance / np.max(normal_vals)
     assert np.min(instance) > 0 and np.isclose(
         np.max(instance), 1
     ), "Minimum must be greater than zero and maximum ~1 after normalizing"
@@ -129,6 +131,8 @@ def optimal_route(instance, cfg):
     # initialize graph
     graph, cfg = _initialize_graph(instance, cfg)
 
+    # Put in cfg that we use the raster-routing with geometric costs
+    cfg["geometric_route"] = True
     # set the ring to the 8-neighborhood
     cfg["point_dist_min"] = 0.9
     cfg["point_dist_max"] = 1.5
@@ -275,6 +279,8 @@ def ksp_routes(instance, cfg, k, algorithm=KSP.ksp):
     # initialize graph
     graph, cfg = _initialize_graph(instance, cfg)
 
+    # Put in cfg that we use the raster-routing with geometric costs
+    cfg["geometric_route"] = True
     # set the ring to the 8-neighborhood
     cfg["point_dist_min"] = 1
     cfg["point_dist_max"] = 1.5

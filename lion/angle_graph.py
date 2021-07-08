@@ -239,14 +239,15 @@ class AngleGraph():
     # --------------------------------------------------------------------
     # SHORTEST PATH COMPUTATION
 
-    def build_source_sp_tree(self, edge_weight=0, **kwargs):
+    def build_source_sp_tree(
+        self, edge_weight=0, geometric_route=False, **kwargs
+    ):
         self.edge_weight = edge_weight
         shift_norms = np.array([np.linalg.norm(s) for s in self.shifts])
-        if np.any(shift_norms == 1):
-            logger.warning("raster approach - edge weight set to zero")
-            self.edge_weight = 0
+        if geometric_route:
+            logger.info("raster approach - edge weight set to -1 ")
+            self.edge_weight = -1
 
-        shift_norms = [np.linalg.norm(s) for s in self.shifts]
         tic = time.time()
         # precompute edge costs
         self.edge_cost = np.zeros(self.dists.shape) + np.inf

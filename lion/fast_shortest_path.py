@@ -76,20 +76,32 @@ def edge_costs(
                 and 0 <= neigh_y < edge_inst_len_y
                 and pos2node[neigh_x, neigh_y] >= 0
             ):
+                # compute resistances along bresenham line (straight line
+                # through raster, corresponding to cable)
                 bresenham_edge_dist = 0
                 if edge_weight > 0:
                     bres_line = shift_lines[s] + np.array([v_x, v_y])
                     edge_cost_list = np.zeros(len(bres_line) - 2)
+                    # sum up the resistances of all crossed cells
                     for k in range(1, len(bres_line) - 1):
                         edge_cost_list[k - 1] = edge_inst[bres_line[k][0],
                                                           bres_line[k][1]]
-                    # TODO: mean or sum?
-                    bresenham_edge_dist = edge_weight * np.mean(edge_cost_list)
+                    # edge cost = average cable resistance x length of cable
+                    # --> If edge_weight = 1, cable resistances are as costly
+                    # as pylon resistances
+                    bresenham_edge_dist = (
+                        shift_costs[s] * edge_weight * np.mean(edge_cost_list)
+                    )
+                # get index of neighboring pylon that is reached via shift s
                 neigh_ind = pos2node[neigh_x, neigh_y]
-                edge_cost[neigh_ind, s] = shift_costs[s] * (
-                    0.5 * (vertex_costs + instance[neigh_x, neigh_y]) +
-                    bresenham_edge_dist
-                )
+                # raw pylon costs
+                pylon_cost = 0.5 * (vertex_costs + instance[neigh_x, neigh_y])
+                # geometric costs (indicated if edge weight negative)
+                if edge_weight < 0:
+                    bresenham_edge_dist = pylon_cost * (shift_costs[s] - 1)
+
+                # sum up resistances for only the pylons
+                edge_cost[neigh_ind, s] = pylon_cost + bresenham_edge_dist
     return edge_cost
 
 

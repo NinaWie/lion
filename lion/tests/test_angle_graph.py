@@ -33,7 +33,7 @@ class TestImplicitLG(unittest.TestCase):
         start_inds[0], start_inds[1], dest_inds[0], dest_inds[1]
     )
     for (i, j) in line:
-        working_expl_corr[i - 1:i + 1, j - 1:j + 1] = 1
+        working_expl_corr[i - 2:i + 2, j - 2:j + 2] = 1
 
     # construct instance that required 90 degree angle
     high_angle_corr = np.zeros(expl_shape)
@@ -94,11 +94,11 @@ class TestImplicitLG(unittest.TestCase):
             shift_costs = np.linalg.norm(path[p] - path[p + 1])
             # append edge cost
             a.append(
-                shift_costs * (
+                (
                     0.5 * (
                         weighted_inst[tuple(path[p])] +
                         weighted_inst[tuple(path[p + 1])]
-                    ) + bresenham_edge_dist
+                    ) + shift_costs * bresenham_edge_dist
                 )
             )
         dest_costs_gt = np.sum(a)
