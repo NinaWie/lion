@@ -148,7 +148,8 @@ If you use this code in a publication, please cite the following paper:
 @article{wiedemann2021optimization,
   title={An Optimization Framework for Power Infrastructure Planning},
   author={Wiedemann, Nina and Adjiashvili, David},
-  journal={arXiv preprint arXiv:2101.03388},
-  year={2021}
+  journal={IEEE Transactions on Power Systems},
+  year={2021},
+  publisher={IEEE}
 }
 ```
